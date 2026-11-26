@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import mlflow
-
 from app.domain.entities import ExperimentRun
 
 
@@ -21,6 +19,8 @@ def _normalize_tracking_uri(uri: str) -> str:
 def log_run_to_mlflow(run: ExperimentRun, tracking_uri: str = "file:./artifacts/mlruns") -> str | None:
     """Log an ExperimentRun to MLflow and return the MLflow run_id if successful."""
     try:
+        import mlflow
+
         resolved_uri = _normalize_tracking_uri(tracking_uri)
         mlflow.set_tracking_uri(resolved_uri)
         mlflow.set_experiment(run.experiment_name)

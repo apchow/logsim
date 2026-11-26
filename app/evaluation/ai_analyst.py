@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import inspect
 import os
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +13,8 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from app.evaluation.statistics import compare_policies_paired
+
+GEMINI_TIMEOUT_SEC = 8.0
 
 
 def _load_api_key() -> str | None:
@@ -65,8 +70,9 @@ def analyze_experiment_with_gemini(
     baseline_policy_id: str = "current_replay",
     question: str | None = None,
     model: str = "gemini-4-hydrogen",
+    timeout_sec: float = GEMINI_TIMEOUT_SEC,
 ) -> dict[str, Any]:
-    """Generate an executive comparison narrative via Gemini API (`google-genai`) when key is set."""
+    """Generate an executive comparison narrative via Gemini API (`google-genai`) with strict timeout."""
     if exp_df.empty:
         return {"source": "none", "markdown": "No runs found for this experiment."}
 
@@ -120,30 +126,53 @@ def analyze_experiment_with_gemini(
         "production candidate and highlight any constraint-violation or empty-mile tradeoffs."
     )
 
-    try:
+    def _call_gemini() -> str:
         from google import genai
 
-        client = genai.Client(api_key=api_key)
-        interaction = client.interactions.create(
-            model=model,
-            system_instruction=(
+        client_kwargs: dict[str, Any] = {"api_key": api_key}
+        try:
+            sig = inspect.signature(genai.Client)
+            if "http_options" in sig.parameters:
+                client_kwargs["http_options"] = {"timeout": int(timeout_sec * 1000)}
+        except (TypeError, ValueError):
+            pass
+
+        client = genai.Client(**client_kwargs)
+        create_kwargs: dict[str, Any] = {
+            "model": model,
+            "system_instruction": (
                 "You are a senior logistics architect reviewing empirical discrete-event backtest results. "
                 "Cite ONLY numbers directly present in the provided CSV tables. Never invent metrics, "
                 "and explicitly call out constraint violations and statistical significance."
             ),
-            input=(
+            "input": (
                 f"Experiment: {experiment_name}\nBaseline: {baseline_policy_id}\n\n"
                 f"Mean Policy KPIs:\n{prompt_table}\n\n"
                 f"Paired Uplift & Significance:\n{comp_subset}\n\n"
                 f"Question: {user_q}"
             ),
-            store=False,
-        )
-        text = str(getattr(interaction, "output_text", "") or "").strip()
+            "store": False,
+        }
+        try:
+            create_sig = inspect.signature(client.interactions.create)
+            if "timeout" in create_sig.parameters:
+                create_kwargs["timeout"] = timeout_sec
+        except (TypeError, ValueError):
+            pass
+
+        interaction = client.interactions.create(**create_kwargs)
+        return str(getattr(interaction, "output_text", "") or "").strip()
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_call_gemini)
+    try:
+        text = future.result(timeout=timeout_sec)
+        executor.shutdown(wait=False)
         if text:
             return {"source": f"gemini:{model}", "markdown": text}
-    except Exception as exc:
-        err_msg = type(exc).__name__
+    except FuturesTimeoutError:
+        future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
         return {
             "source": "deterministic_fallback",
             "markdown": _deterministic_fallback_summary(
@@ -151,7 +180,19 @@ def analyze_experiment_with_gemini(
                 baseline_policy_id,
                 agg_df,
                 comp_df,
-                note=err_msg,
+                note=f"TimeoutError ({timeout_sec:.0f}s limit)",
+            ),
+        }
+    except Exception as exc:
+        executor.shutdown(wait=False, cancel_futures=True)
+        return {
+            "source": "deterministic_fallback",
+            "markdown": _deterministic_fallback_summary(
+                experiment_name,
+                baseline_policy_id,
+                agg_df,
+                comp_df,
+                note=type(exc).__name__,
             ),
         }
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -114,13 +115,29 @@ def verify_snapshot(snapshot_dir: str | Path) -> SnapshotManifest:
         (target / "manifest.json").read_text(encoding="utf-8")
     )
     pq_df = pl.read_parquet(target / "orders.parquet")
-    orders = [Order.model_validate(r) for r in pq_df.to_dicts()]
-    canonical = _canonical_orders_bytes(orders)
-    if _sha256_bytes(canonical) != manifest.canonical_sha256 or len(orders) != manifest.row_count:
-        raise ValueError("Snapshot integrity check failed: canonical hash or row count mismatch")
-    if (target / "orders.jsonl").read_bytes() != canonical:
-        raise ValueError("Snapshot integrity check failed: orders.jsonl differs from orders.parquet")
-    if {o.is_synthetic for o in orders} != {manifest.synthetic}:
+    if pq_df.height != manifest.row_count:
+        raise ValueError("Snapshot integrity check failed: row count mismatch")
+
+    jl_bytes = (target / "orders.jsonl").read_bytes()
+    if "destination_hub_id" in pq_df.columns and "created_minute" in pq_df.columns:
+        orders = [Order.model_validate(r) for r in pq_df.to_dicts()]
+        canonical = _canonical_orders_bytes(orders)
+        if _sha256_bytes(canonical) != manifest.canonical_sha256:
+            raise ValueError("Snapshot integrity check failed: canonical hash mismatch")
+        if jl_bytes != canonical:
+            raise ValueError("Snapshot integrity check failed: orders.jsonl differs from orders.parquet")
+        if {o.is_synthetic for o in orders} != {manifest.synthetic}:
+            raise ValueError("Snapshot provenance mismatch between manifest and orders")
+        return manifest
+
+    # Raw/dep content-addressed snapshot layout (canonical_sha256 hashes orders.jsonl)
+    if _sha256_bytes(jl_bytes) != manifest.canonical_sha256:
+        raise ValueError("Snapshot integrity check failed: orders.jsonl hash mismatch")
+    jl_lines = [json.loads(line) for line in jl_bytes.decode("utf-8").splitlines() if line.strip()]
+    if len(jl_lines) != manifest.row_count:
+        raise ValueError("Snapshot integrity check failed: orders.jsonl row count mismatch")
+    syn_col = "synthetic" if "synthetic" in pq_df.columns else "is_synthetic"
+    if syn_col in pq_df.columns and set(pq_df[syn_col].to_list()) != {manifest.synthetic}:
         raise ValueError("Snapshot provenance mismatch between manifest and orders")
     return manifest
 

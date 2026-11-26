@@ -31,7 +31,6 @@ from app.experiments.registry import ExperimentRegistry
 from app.experiments.runner import run_backtest_suite, run_single_episode
 from app.experiments.scenarios import load_scenarios
 from app.policies.registry import available_policy_ids, build_policy
-from app.policies.rl.ppo_trainer import train_ppo_policy
 
 app = typer.Typer(
     name="logisticsbt",
@@ -133,6 +132,9 @@ def simulate(
     seed: Annotated[int, typer.Option("--seed", help="Random seed")] = 101,
     dataset: Annotated[Path | None, typer.Option("--dataset", "-d", help="Dataset snapshot path")] = None,
     experiment: Annotated[str, typer.Option("--experiment", "-e", help="Experiment name")] = "cli_simulate",
+    routing_provider: Annotated[
+        str | None, typer.Option("--routing-provider", help="Optional routing provider: osrm, graphhopper, planar")
+    ] = None,
 ) -> None:
     """Run a single discrete-event simulation episode and record to the registry."""
     settings = load_app_settings()
@@ -152,6 +154,7 @@ def simulate(
         settings=settings,
         experiment_name=experiment,
         registry=reg,
+        routing_provider=routing_provider,
     )
     m = run.metrics
     table = Table(title=f"Simulation Result: {policy} | {scenario} | seed={seed}")
@@ -183,6 +186,8 @@ def train(
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Model zip output path")] = None,
 ) -> None:
     """Train a Stable-Baselines3 PPO policy across reverse-logistics scenarios."""
+    from app.policies.rl.ppo_trainer import train_ppo_policy
+
     settings = load_app_settings()
     scenarios_map = load_scenarios()
     train_scenarios = [
@@ -222,6 +227,9 @@ def backtest(
     dataset: Annotated[Path | None, typer.Option("--dataset", "-d", help="Dataset snapshot path")] = None,
     auto_train_ppo: Annotated[bool, typer.Option("--auto-train-ppo/--no-auto-train-ppo", help="Train PPO automatically if model file missing")] = True,
     ppo_timesteps: Annotated[int, typer.Option("--ppo-timesteps", help="Timesteps if auto-training PPO")] = 12000,
+    routing_provider: Annotated[
+        str | None, typer.Option("--routing-provider", help="Optional routing provider: osrm, graphhopper, planar")
+    ] = None,
 ) -> None:
     """Run paired multi-seed backtest across policies and scenarios, then generate reports."""
     settings = load_app_settings()
@@ -245,6 +253,8 @@ def backtest(
     ppo_path = Path(settings.rl.model_output_path)
     if "ppo_agent" in policy_list and not ppo_path.exists():
         if auto_train_ppo:
+            from app.policies.rl.ppo_trainer import train_ppo_policy
+
             console.print("[yellow]PPO checkpoint missing — training compact MlpPolicy PPO...[/yellow]")
             rl_cfg = settings.rl.model_copy(update={"total_timesteps": ppo_timesteps})
             train_ppo_policy(
@@ -267,6 +277,7 @@ def backtest(
         settings=settings,
         experiment_name=experiment,
         baseline_policy_id=baseline,
+        routing_provider=routing_provider,
     )
     console.print(
         f"[green]Completed {len(out['runs'])} runs[/green] for experiment '{experiment}'."

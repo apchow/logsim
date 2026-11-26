@@ -96,14 +96,17 @@ def load_scenarios(path: str | Path = "configs/scenarios.yaml") -> dict[str, Sce
             s = _coerce_scenario_item(item)
             scenarios_map[s.scenario_id] = s
 
-    # Also load individual scenario YAML files under configs/scenarios/ (e.g., baseline.yaml, demand_surge.yaml)
-    scen_dir = cfg_path.parent / "scenarios"
-    if scen_dir.is_dir():
+    # Load scenario YAML files from both package/config dir and current working dir (configs/scenarios/)
+    candidate_dirs: list[Path] = []
+    for cand in (cfg_path.parent / "scenarios", Path("configs/scenarios")):
+        if cand.is_dir() and cand.resolve() not in {d.resolve() for d in candidate_dirs}:
+            candidate_dirs.append(cand)
+    for scen_dir in candidate_dirs:
         for yaml_file in sorted(scen_dir.glob("*.yaml")):
             item = load_yaml_config(yaml_file)
             if "scenario_id" in item:
                 s = _coerce_scenario_item(item)
-                scenarios_map.setdefault(s.scenario_id, s)
+                scenarios_map[s.scenario_id] = s
 
     if not scenarios_map:
         return {s.scenario_id: s for s in default_scenarios()}

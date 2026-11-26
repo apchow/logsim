@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from pathlib import Path
 from typing import Any
 
 import gymnasium as gym
@@ -19,6 +20,7 @@ from app.domain.entities import (
     Scenario,
 )
 from app.domain.enums import HandlingClass
+from app.routing.adapters import RouteMatrix
 from app.simulation.engine import DecisionContext, ReverseLogisticsSimulator, StepMetricsDelta
 
 
@@ -37,6 +39,10 @@ class ReverseLogisticsEnv(gym.Env[np.ndarray, np.ndarray]):
         policy_version: str = "1.0.0",
         seed: int = 42,
         run_id: str | None = None,
+        routing_provider: str | None = None,
+        routing_profile: str = "driving",
+        route_matrix: RouteMatrix | None = None,
+        route_cache_path: str | Path | None = None,
     ) -> None:
         super().__init__()
         self.base_dataset = dataset
@@ -50,6 +56,10 @@ class ReverseLogisticsEnv(gym.Env[np.ndarray, np.ndarray]):
         self.policy_version = policy_version
         self._base_seed = seed
         self._run_id = run_id
+        self._routing_provider = routing_provider
+        self._routing_profile = routing_profile
+        self._route_matrix = route_matrix
+        self._route_cache_path = route_cache_path
 
         self.max_orders = self.sim_settings.max_visible_orders
         self.max_vehicles = min(
@@ -105,6 +115,10 @@ class ReverseLogisticsEnv(gym.Env[np.ndarray, np.ndarray]):
             seed=resolved_seed,
             sim_settings=self.sim_settings,
             run_id=self._run_id,
+            routing_provider=self._routing_provider,
+            routing_profile=self._routing_profile,
+            route_matrix=self._route_matrix,
+            route_cache_path=self._route_cache_path,
         )
         self.vehicle_ids = sorted(self.simulator.vehicles.keys())[: self.max_vehicles]
         self.current_context = self.simulator.advance_to_first_decision()

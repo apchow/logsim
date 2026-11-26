@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -29,6 +30,12 @@ from app.domain.enums import (
     LocationType,
     OrderStatus,
     OverlayType,
+)
+from app.routing.adapters import (
+    GeoPoint,
+    RouteMatrix,
+    compute_matrix_sha256,
+    get_route_matrix,
 )
 from app.simulation.constraints import ConstraintGuard, VehicleRuntimeStatus
 from app.simulation.disruptions import ActiveDisruptionState, apply_static_scenario_overlays
@@ -138,6 +145,10 @@ class ReverseLogisticsSimulator:
         seed: int,
         sim_settings: SimulationSettings | None = None,
         run_id: str | None = None,
+        routing_provider: str | None = None,
+        routing_profile: str = "driving",
+        route_matrix: RouteMatrix | None = None,
+        route_cache_path: str | Path | None = None,
     ) -> None:
         self.base_dataset = dataset
         self.scenario = scenario
@@ -178,6 +189,12 @@ class ReverseLogisticsSimulator:
         self.lane_base_minutes: dict[tuple[str, str], float] = {
             k: v.base_transit_minutes for k, v in self.lanes.items()
         }
+        self.routing_provider, self.route_matrix_sha256 = self._init_routing_matrix(
+            routing_provider=routing_provider,
+            routing_profile=routing_profile,
+            route_matrix=route_matrix,
+            route_cache_path=route_cache_path,
+        )
 
         # Hubs & SimPy resources (supports return hubs as well as depot/hub/warehouse bundles)
         self.hubs: dict[str, HubRuntime] = {}
@@ -235,21 +252,55 @@ class ReverseLogisticsSimulator:
         # Register SimPy background processes
         self._schedule_background_processes()
 
+    def _init_routing_matrix(
+        self,
+        routing_provider: str | None,
+        routing_profile: str,
+        route_matrix: RouteMatrix | None,
+        route_cache_path: str | Path | None,
+    ) -> tuple[str, str]:
+        """Populate lane matrices from cached RouteMatrix when configured and return provenance hash."""
+        active_matrix = route_matrix
+        if active_matrix is None and routing_provider is not None:
+            ordered_locs = sorted(self.locations.values(), key=lambda loc: loc.location_id)
+            pts = [
+                GeoPoint(location_id=loc.location_id, x_km=loc.x_km, y_km=loc.y_km)
+                for loc in ordered_locs
+            ]
+            active_matrix = get_route_matrix(
+                origins=pts,
+                destinations=pts,
+                provider=routing_provider,
+                profile=routing_profile,
+                cache_path=route_cache_path,
+            )
+
+        if active_matrix is not None:
+            dist_map, dur_map = active_matrix.to_lane_maps()
+            self.lane_distances.update(dist_map)
+            self.lane_base_minutes.update(dur_map)
+            return routing_provider or active_matrix.provider, active_matrix.matrix_sha256
+
+        loc_ids = sorted(self.locations.keys())
+        dists = [[self._lane_distance(o, d) for d in loc_ids] for o in loc_ids]
+        durs = [[self._lane_base_minutes(o, d) for d in loc_ids] for o in loc_ids]
+        return "dataset_lanes", compute_matrix_sha256(dists, durs)
+
     def _lane_distance(self, orig: str, dest: str) -> float:
         if orig == dest:
             return 0.0
-        lane = self.lanes.get((orig, dest))
-        if lane is not None:
-            return lane.distance_km
+        dist = self.lane_distances.get((orig, dest))
+        if dist is not None:
+            return dist
         a, b = self.locations[orig], self.locations[dest]
         return round(max(1.5, math.hypot(a.x_km - b.x_km, a.y_km - b.y_km) * 1.18), 2)
 
     def _lane_base_minutes(self, orig: str, dest: str) -> float:
         if orig == dest:
             return 0.0
-        lane = self.lanes.get((orig, dest))
-        if lane is not None:
-            return lane.base_transit_minutes
+        mins = self.lane_base_minutes.get((orig, dest))
+        if mins is not None:
+            return mins
         return max(5.0, (self._lane_distance(orig, dest) / 42.0) * 60.0)
 
     def _effective_transit_minutes(self, orig: str, dest: str, speed_kmph: float) -> float:
@@ -646,6 +697,8 @@ class ReverseLogisticsSimulator:
                 "accepted_count": len(check.accepted_assignments),
                 "violation_count": check.violation_count,
                 "solver_time_ms": round(decision.solver_time_ms, 3),
+                "routing_provider": self.routing_provider,
+                "matrix_sha256": self.route_matrix_sha256,
             },
         )
 
@@ -686,6 +739,56 @@ class ReverseLogisticsSimulator:
         next_ctx = self.build_causal_context()
         return next_ctx, self._step_delta, done
 
+    def _optimize_stop_sequence(
+        self,
+        start_loc: str,
+        batch: list[OrderRuntimeRecord],
+        target_hub_id: str,
+    ) -> list[OrderRuntimeRecord]:
+        """Order multi-stop pickup sequence via nearest-neighbor plus 2-opt refinement."""
+
+        def _stop_loc(r: OrderRuntimeRecord) -> str:
+            return r.order.origin_id if r.order.origin_id != target_hub_id else r.order.destination_hub_id
+
+        remaining = list(batch)
+        ordered: list[OrderRuntimeRecord] = []
+        cursor = start_loc
+        while remaining:
+            nxt = min(remaining, key=lambda r: (self._lane_distance(cursor, _stop_loc(r)), r.order.order_id))
+            ordered.append(nxt)
+            cursor = _stop_loc(nxt)
+            remaining.remove(nxt)
+
+        if len(ordered) <= 2:
+            return ordered
+
+        def _tour_km(seq: list[OrderRuntimeRecord]) -> float:
+            total = 0.0
+            prev = start_loc
+            for item in seq:
+                loc = _stop_loc(item)
+                total += self._lane_distance(prev, loc)
+                prev = loc
+            return total + self._lane_distance(prev, target_hub_id)
+
+        best_km = _tour_km(ordered)
+        improved = True
+        while improved:
+            improved = False
+            n = len(ordered)
+            for i in range(n - 1):
+                for j in range(i + 1, n):
+                    candidate = ordered[:i] + list(reversed(ordered[i : j + 1])) + ordered[j + 1 :]
+                    cand_km = _tour_km(candidate)
+                    if cand_km + 1e-6 < best_km:
+                        ordered = candidate
+                        best_km = cand_km
+                        improved = True
+                        break
+                if improved:
+                    break
+        return ordered
+
     def _vehicle_pickup_route_proc(self, vehicle_id: str, batch: list[OrderRuntimeRecord]) -> Any:
         vst = self.vehicles[vehicle_id]
         veh = vst.vehicle
@@ -697,15 +800,7 @@ class ReverseLogisticsSimulator:
         def _stop_loc(r: OrderRuntimeRecord) -> str:
             return r.order.origin_id if r.order.origin_id != target_hub_id else r.order.destination_hub_id
 
-        # Determine stop order (nearest-neighbor heuristic across assigned stops)
-        remaining = list(batch)
-        ordered_stops: list[OrderRuntimeRecord] = []
-        cursor = vst.current_location_id
-        while remaining:
-            nxt = min(remaining, key=lambda r: self._lane_distance(cursor, _stop_loc(r)))
-            ordered_stops.append(nxt)
-            cursor = _stop_loc(nxt)
-            remaining.remove(nxt)
+        ordered_stops = self._optimize_stop_sequence(vst.current_location_id, batch, target_hub_id)
 
         first_stop = _stop_loc(ordered_stops[0])
         first_leg_km = self._lane_distance(vst.current_location_id, first_stop)
@@ -726,7 +821,13 @@ class ReverseLogisticsSimulator:
                 location_id=cur_loc,
                 order_id=rec.order.order_id,
                 resource_id=vehicle_id,
-                payload={"vehicle_id": vehicle_id, "origin_id": rec.order.origin_id},
+                payload={
+                    "vehicle_id": vehicle_id,
+                    "origin_id": rec.order.origin_id,
+                    "stop_count": len(ordered_stops),
+                    "routing_provider": self.routing_provider,
+                    "matrix_sha256": self.route_matrix_sha256,
+                },
             )
 
         for rec in ordered_stops:
@@ -828,14 +929,18 @@ class ReverseLogisticsSimulator:
         vst.total_busy_minutes += route_minutes
         vst.busy_until_minute = self.env.now
 
-        # Costs & emissions
+        # Costs & emissions (slightly scaled by vehicle mass load factor)
+        batch_weight_kg = sum(
+            self.skus[r.order.sku_id].unit_weight_kg * r.order.quantity for r in ordered_stops
+        )
+        load_ratio = min(1.0, batch_weight_kg / max(1.0, veh.capacity_kg))
         transport_cost = (
             9.0
             + total_km * veh.cost_per_km
             + empty_km * self.settings.empty_mile_cost_factor
             + (route_minutes / 60.0) * veh.cost_per_hour
         )
-        co2 = total_km * veh.emission_kg_co2_per_km
+        co2 = total_km * veh.emission_kg_co2_per_km * (1.0 + 0.08 * load_ratio)
         self._step_delta.transport_cost += transport_cost
         self._cumulative.transport_cost += transport_cost
         self._step_delta.total_miles_km += total_km
@@ -852,7 +957,12 @@ class ReverseLogisticsSimulator:
             entity_type="vehicle",
             location_id=target_hub_id,
             resource_id=vehicle_id,
-            payload={"route_minutes": round(route_minutes, 2), "total_km": round(total_km, 2)},
+            payload={
+                "route_minutes": round(route_minutes, 2),
+                "total_km": round(total_km, 2),
+                "routing_provider": self.routing_provider,
+                "matrix_sha256": self.route_matrix_sha256,
+            },
         )
 
         # Deliver orders & start triage pipeline
@@ -861,10 +971,12 @@ class ReverseLogisticsSimulator:
 
     def _overflow_carrier_proc(self, rec: OrderRuntimeRecord) -> Any:
         order = rec.order
-        dist = self._lane_distance(order.origin_id, order.destination_hub_id)
+        hub_id_resolved = self._resolve_hub_id(order)
+        route_stop = order.origin_id if order.origin_id != hub_id_resolved else order.destination_hub_id
+        dist = self._lane_distance(route_stop, hub_id_resolved)
         transit = max(
             self.settings.overflow_carrier_transit_minutes,
-            self._effective_transit_minutes(order.origin_id, order.destination_hub_id, 35.0) * 1.5,
+            self._effective_transit_minutes(route_stop, hub_id_resolved, 35.0) * 1.5,
         )
         self.event_log.append(
             timestamp_minute=self.env.now,
@@ -874,7 +986,12 @@ class ReverseLogisticsSimulator:
             location_id=order.origin_id,
             order_id=order.order_id,
             resource_id="3PL-OVERFLOW",
-            payload={"mode": "overflow_carrier", "distance_km": dist},
+            payload={
+                "mode": "overflow_carrier",
+                "distance_km": dist,
+                "routing_provider": self.routing_provider,
+                "matrix_sha256": self.route_matrix_sha256,
+            },
         )
         rec.status = OrderStatus.IN_TRANSIT
         yield self.env.timeout(transit)
@@ -888,7 +1005,6 @@ class ReverseLogisticsSimulator:
         self._step_delta.carbon_kg_co2 += co2
         self._cumulative.carbon_kg_co2 += co2
 
-        hub_id_resolved = order.destination_hub_id if order.destination_hub_id in self.hubs else next(iter(self.hubs))
         hub = self.hubs[hub_id_resolved]
         with hub.dock_res.request() as dock_req:
             yield dock_req

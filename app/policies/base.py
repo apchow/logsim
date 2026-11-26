@@ -30,8 +30,16 @@ class EpochCapacityTracker:
 
     def estimate_leg_minutes(self, vehicle: VehicleCausalView, order: PublicOrderView) -> float:
         """Estimate incremental route duration using strictly causal lane base minutes."""
-        d1 = self.ctx.lane_base_minutes.get((vehicle.current_location_id, order.origin_id), 20.0)
-        d2 = self.ctx.lane_base_minutes.get((order.origin_id, order.destination_hub_id), 20.0)
+        d1 = (
+            0.0
+            if vehicle.current_location_id == order.origin_id
+            else self.ctx.lane_base_minutes.get((vehicle.current_location_id, order.origin_id), 20.0)
+        )
+        d2 = (
+            0.0
+            if order.origin_id == order.destination_hub_id
+            else self.ctx.lane_base_minutes.get((order.origin_id, order.destination_hub_id), 20.0)
+        )
         base = d1 + d2 + 15.0
         return base if self.assigned_counts[vehicle.vehicle_id] == 0 else base * 0.45
 

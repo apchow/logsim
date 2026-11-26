@@ -21,7 +21,7 @@ class ORToolsDispatchPolicy(BasePolicy):
     policy_type = PolicyType.OPTIMIZER
     policy_version = "1.0.0"
 
-    def __init__(self, solver_time_limit_sec: float = 0.25) -> None:
+    def __init__(self, solver_time_limit_sec: float = 1.0) -> None:
         self.solver_time_limit_sec = solver_time_limit_sec
         self.last_solve_ms: float = 0.0
 

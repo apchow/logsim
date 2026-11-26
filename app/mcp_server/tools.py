@@ -1,18 +1,25 @@
-"""Typed tool functions backing the internal Logistics Backtester MCP server."""
+"""Typed tool functions backing both the internal MCP server and FastAPI endpoints."""
 
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import yaml
 
 from app.config import load_app_settings
-from app.data.ingestion import verify_snapshot
+from app.data.ingestion import (
+    ingest_orders_file,
+    read_tabular_rows_strict,
+    verify_snapshot,
+)
 from app.data.normalization import load_dataset_snapshot
 from app.data.synthetic import generate_synthetic_dataset
 from app.data.validation import validate_dataset as validate_network_dataset
+from app.data.validation import validate_raw_order_rows
 from app.domain.entities import (
     KPIResult,
     NetworkDataset,
@@ -24,18 +31,92 @@ from app.domain.enums import HandlingClass, OrderStatus, OverlayType
 from app.evaluation.attribution import compute_cost_and_bottleneck_attribution
 from app.evaluation.statistics import compare_policies_paired, summarize_across_seeds
 from app.experiments.registry import ExperimentRegistry
-from app.experiments.runner import run_backtest_suite
+from app.experiments.runner import run_backtest_suite, run_single_episode
 from app.experiments.scenarios import load_scenarios
 from app.policies.optimizers.ortools_dispatcher import ORToolsDispatchPolicy
+from app.policies.registry import build_policy
 from app.routing.adapters import GeoPoint, get_route_matrix
 from app.simulation.engine import DecisionContext, HubCausalView, VehicleCausalView
 
 
-def _resolve_default_dataset(seed: int = 42) -> NetworkDataset:
-    default_syn = Path("data/synthetic/default/dataset_snapshot.json")
-    if default_syn.exists():
-        return load_dataset_snapshot(default_syn)
-    return generate_synthetic_dataset(seed=seed)
+def _df_to_json_records(df: pd.DataFrame) -> list[dict[str, Any]]:
+    """Convert DataFrame rows to strict JSON-safe dictionaries (replacing NaN with None)."""
+    if df.empty:
+        return []
+    clean = df.astype(object).where(pd.notna(df), None)
+    return list(clean.to_dict(orient="records"))
+
+
+def resolve_dataset_input(
+    dataset_path: str | Path | None = None,
+    seed: int = 42,
+    routing_provider: str | None = None,
+    routing_profile: str = "driving",
+) -> NetworkDataset:
+    """Resolve reverse-logistics snapshots, dep multi-table bundles, raw tabular files, or synthetic defaults."""
+    if dataset_path is None or str(dataset_path).strip() == "":
+        default_syn = Path("data/synthetic/default/dataset_snapshot.json")
+        if routing_provider is None and default_syn.exists():
+            return load_dataset_snapshot(default_syn)
+        return generate_synthetic_dataset(
+            seed=seed,
+            routing_provider=routing_provider,
+            routing_profile=routing_profile,
+        )
+
+    src = Path(dataset_path)
+    if not src.exists():
+        raise FileNotFoundError(f"Dataset path does not exist: {src}")
+
+    if src.is_dir() and (src / "dataset_snapshot.json").exists():
+        return load_dataset_snapshot(src / "dataset_snapshot.json")
+
+    if src.suffix.lower() == ".json":
+        return load_dataset_snapshot(src)
+
+    # Support directory bundles (e.g., examples/demo) and CSV/Parquet files without mutating source
+    with tempfile.TemporaryDirectory(prefix="logisticsbt_ds_") as tmp_dir:
+        ds, _ = ingest_orders_file(
+            input_path=src,
+            output_dir=Path(tmp_dir),
+            dataset_id=src.stem or "dataset",
+            is_synthetic=None,
+        )
+        return ds
+
+
+def tool_simulate_once(
+    scenario_id: str = "baseline_normal",
+    policy_id: str = "ortools_optimizer",
+    seed: int = 101,
+    dataset_path: str | None = None,
+    experiment_name: str = "mcp_simulate",
+    routing_provider: str | None = None,
+) -> dict[str, Any]:
+    """Run one discrete-event simulation episode and record KPI & event logs to DuckDB/Parquet."""
+    settings = load_app_settings()
+    scenarios = load_scenarios()
+    if scenario_id not in scenarios:
+        raise KeyError(f"Scenario '{scenario_id}' not found")
+
+    dataset = resolve_dataset_input(
+        dataset_path=dataset_path,
+        seed=seed,
+        routing_provider=routing_provider,
+    )
+    policy = build_policy(policy_id, ppo_model_path=settings.rl.model_output_path)
+    registry = ExperimentRegistry(settings.duckdb_path)
+    run = run_single_episode(
+        dataset=dataset,
+        scenario=scenarios[scenario_id],
+        policy=policy,
+        seed=seed,
+        settings=settings,
+        experiment_name=experiment_name,
+        registry=registry,
+        routing_provider=routing_provider,
+    )
+    return run.model_dump(mode="json")
 
 
 def tool_run_backtest(
@@ -44,16 +125,25 @@ def tool_run_backtest(
     seeds: list[int] | None = None,
     experiment_name: str = "mcp_backtest",
     baseline_policy_id: str = "current_replay",
+    dataset_path: str | None = None,
+    routing_provider: str | None = None,
 ) -> dict[str, Any]:
     """Run a paired multi-seed discrete-event backtest and store artifacts in DuckDB/Parquet."""
     settings = load_app_settings()
     scenarios_map = load_scenarios()
-    selected = [scenarios_map[s] for s in scenario_ids if s in scenarios_map]
+    missing = [s for s in scenario_ids if s not in scenarios_map]
+    if missing:
+        raise KeyError(f"Scenario(s) not found: {missing}")
+    selected = [scenarios_map[s] for s in scenario_ids]
     if not selected:
-        raise ValueError(f"No valid scenario_ids found in {scenario_ids}")
+        raise ValueError(f"No scenario_ids provided: {scenario_ids}")
 
     use_seeds = seeds or settings.default_seeds
-    dataset = _resolve_default_dataset(seed=42)
+    dataset = resolve_dataset_input(
+        dataset_path=dataset_path,
+        seed=42,
+        routing_provider=routing_provider,
+    )
     out = run_backtest_suite(
         dataset=dataset,
         scenarios=selected,
@@ -62,6 +152,7 @@ def tool_run_backtest(
         settings=settings,
         experiment_name=experiment_name,
         baseline_policy_id=baseline_policy_id,
+        routing_provider=routing_provider,
     )
     return {
         "experiment_name": out["experiment_name"],
@@ -70,6 +161,8 @@ def tool_run_backtest(
         "parquet_path": str(out["parquet_path"]),
         "html_path": str(out["html_path"]),
         "pdf_path": str(out["pdf_path"]),
+        "summary": _df_to_json_records(out["summary_df"]),
+        "comparison": _df_to_json_records(out["comparison_df"]),
     }
 
 
@@ -82,15 +175,15 @@ def tool_get_backtest_results(
     settings = load_app_settings()
     reg = ExperimentRegistry(settings.duckdb_path)
     df = reg.get_kpi_dataframe(experiment_name=experiment_name)
-    if policy_id:
+    if policy_id and not df.empty:
         df = df[df["policy_id"] == policy_id]
-    if scenario_id:
+    if scenario_id and not df.empty:
         df = df[df["scenario_id"] == scenario_id]
-    summary_df = summarize_across_seeds(df) if not df.empty else df
+    summary_df = summarize_across_seeds(df) if not df.empty else pd.DataFrame()
     return {
         "row_count": len(df),
-        "runs": list(df.to_dict(orient="records")),
-        "summary": list(summary_df.to_dict(orient="records")) if not summary_df.empty else [],
+        "runs": _df_to_json_records(df),
+        "summary": _df_to_json_records(summary_df),
     }
 
 
@@ -105,7 +198,7 @@ def tool_compare_policies(
     reg = ExperimentRegistry(settings.duckdb_path)
     df = reg.get_kpi_dataframe(experiment_name=experiment_name)
     if df.empty:
-        return {"rows": [], "note": f"No runs found for experiment '{experiment_name}'"}
+        return {"comparison": [], "note": f"No runs found for experiment '{experiment_name}'"}
     use_metrics = tuple(metrics) if metrics else (
         "total_cost",
         "on_time_delivery_rate",
@@ -121,7 +214,7 @@ def tool_compare_policies(
     return {
         "experiment_name": experiment_name,
         "baseline_policy_id": baseline_policy_id,
-        "comparison": list(comp_df.to_dict(orient="records")),
+        "comparison": _df_to_json_records(comp_df),
     }
 
 
@@ -129,20 +222,37 @@ def tool_optimize_routes(
     orders: list[dict[str, Any]],
     vehicles: list[dict[str, Any]],
     timestamp_minute: float = 600.0,
-    solver_time_limit_sec: float = 0.25,
+    solver_time_limit_sec: float = 1.0,
 ) -> dict[str, Any]:
     """Run constrained OR-Tools CP-SAT dispatch assignment over candidate orders and vehicles."""
+    inferred_hub = "HUB-NORTH"
+    if vehicles:
+        first_v = vehicles[0]
+        inferred_hub = str(first_v.get("home_hub_id", first_v.get("location_id", inferred_hub)))
+
     visible_orders: list[PublicOrderView] = []
     lane_dists: dict[tuple[str, str], float] = {}
     lane_mins: dict[tuple[str, str], float] = {}
+    hub_ids_seen: set[str] = {inferred_hub}
 
     for o in orders[:10]:
         orig = str(o.get("origin_id", "ZONE-NW"))
-        hub = str(o.get("destination_hub_id", "HUB-NORTH"))
+        dest_raw = o.get("destination_hub_id", o.get("destination_id", o.get("dest_id")))
+        hub = str(dest_raw) if dest_raw is not None else inferred_hub
+        if orig == inferred_hub and dest_raw is not None:
+            # Forward dep-style order originating at depot/hub toward customer destination
+            route_stop = str(dest_raw)
+            hub = orig
+        else:
+            route_stop = orig
+        hub_ids_seen.add(hub)
+
         dist = float(o.get("estimated_distance_km", 15.0))
-        lane_dists[(orig, hub)] = dist
-        lane_mins[(orig, hub)] = max(5.0, (dist / 42.0) * 60.0)
-        hc = HandlingClass(str(o.get("handling_class", "standard")))
+        lane_dists[(route_stop, hub)] = dist
+        lane_mins[(route_stop, hub)] = max(5.0, (dist / 42.0) * 60.0)
+        hc_raw = str(o.get("handling_class", "standard"))
+        is_hazmat = bool(o.get("requires_safety_segregation", o.get("hazardous", False)))
+        hc = HandlingClass.HAZMAT_BATTERY if is_hazmat and hc_raw == "standard" else HandlingClass(hc_raw)
         visible_orders.append(
             PublicOrderView(
                 order_id=str(o["order_id"]),
@@ -152,8 +262,8 @@ def tool_optimize_routes(
                 total_weight_kg=float(o.get("total_weight_kg", 2.0)),
                 total_volume_m3=float(o.get("total_volume_m3", 0.02)),
                 handling_class=hc,
-                requires_safety_segregation=(hc == HandlingClass.HAZMAT_BATTERY),
-                origin_id=orig,
+                requires_safety_segregation=(is_hazmat or hc == HandlingClass.HAZMAT_BATTERY),
+                origin_id=route_stop,
                 destination_hub_id=hub,
                 created_minute=float(o.get("created_minute", 0.0)),
                 promise_window_start_minute=float(o.get("promise_window_start_minute", 30.0)),
@@ -168,21 +278,23 @@ def tool_optimize_routes(
 
     veh_views: list[VehicleCausalView] = []
     veh_ids: list[str] = []
-    for v in sorted(vehicles, key=lambda x: str(x["vehicle_id"])):
-        vid = str(v["vehicle_id"])
+    for v in sorted(vehicles, key=lambda x: str(x.get("vehicle_id", x.get("resource_id", "")))):
+        vid = str(v.get("vehicle_id", v.get("resource_id")))
         veh_ids.append(vid)
-        cur_loc = str(v.get("current_location_id", v.get("home_hub_id", "HUB-NORTH")))
+        home_hub = str(v.get("home_hub_id", v.get("location_id", inferred_hub)))
+        hub_ids_seen.add(home_hub)
+        cur_loc = str(v.get("current_location_id", home_hub))
         for vo in visible_orders:
             lane_dists.setdefault((cur_loc, vo.origin_id), float(vo.estimated_distance_km))
             lane_mins.setdefault((cur_loc, vo.origin_id), max(5.0, (vo.estimated_distance_km / 42.0) * 60.0))
         veh_views.append(
             VehicleCausalView(
                 vehicle_id=vid,
-                home_hub_id=str(v.get("home_hub_id", "HUB-NORTH")),
+                home_hub_id=home_hub,
                 current_location_id=cur_loc,
                 available=bool(v.get("available", True)),
                 broken_down=bool(v.get("broken_down", False)),
-                hazmat_certified=bool(v.get("hazmat_certified", False)),
+                hazmat_certified=bool(v.get("hazmat_certified", v.get("hazardous_certified", False))),
                 capacity_kg=float(v.get("capacity_kg", 180.0)),
                 capacity_m3=float(v.get("capacity_m3", 2.2)),
                 capacity_units=int(v.get("capacity_units", 20)),
@@ -192,6 +304,21 @@ def tool_optimize_routes(
             )
         )
 
+    hub_views = tuple(
+        HubCausalView(
+            hub_id=hid,
+            total_docks=3,
+            docks_in_use=0,
+            total_inspection_bays=4,
+            inspection_in_use=0,
+            quarantine_units=0,
+            restock_units=25,
+            refurb_kit_units=35,
+            storage_capacity_units=1200,
+        )
+        for hid in sorted(hub_ids_seen)
+    )
+
     ctx = DecisionContext(
         timestamp_minute=timestamp_minute,
         epoch_index=0,
@@ -199,19 +326,7 @@ def tool_optimize_routes(
         visible_orders=tuple(visible_orders),
         total_pending_backlog=len(visible_orders),
         vehicles=tuple(veh_views),
-        hubs=(
-            HubCausalView(
-                hub_id="HUB-NORTH",
-                total_docks=3,
-                docks_in_use=0,
-                total_inspection_bays=4,
-                inspection_in_use=0,
-                quarantine_units=0,
-                restock_units=25,
-                refurb_kit_units=35,
-                storage_capacity_units=1200,
-            ),
-        ),
+        hubs=hub_views,
         active_disruptions=(),
         lane_distances_km=lane_dists,
         lane_base_minutes=lane_mins,
@@ -269,6 +384,35 @@ def tool_get_route_matrix(
     return matrix.model_dump(mode="json")
 
 
+def _load_run_events_df(
+    reg: ExperimentRegistry,
+    run_id: str,
+    limit: int = 1000,
+    matched_run: dict[str, Any] | None = None,
+) -> pd.DataFrame:
+    """Load run events from DuckDB, falling back to archived events_parquet if needed."""
+    df = reg.get_run_events(run_id=run_id, limit=limit)
+    if not df.empty:
+        return df
+
+    meta = matched_run
+    if meta is None:
+        runs = reg.list_runs(limit=500)
+        matched = [r for r in runs if r.get("run_id") == run_id]
+        meta = matched[0] if matched else None
+    if meta and "artifact_paths_json" in meta:
+        try:
+            paths = json.loads(str(meta["artifact_paths_json"]))
+            pq_raw = paths.get("events_parquet")
+            if pq_raw and Path(str(pq_raw)).exists():
+                import polars as pl
+
+                return pl.read_parquet(str(pq_raw)).head(limit).to_pandas()
+        except Exception:
+            pass
+    return df
+
+
 def tool_query_events(
     run_id: str,
     event_types: list[str] | None = None,
@@ -279,7 +423,7 @@ def tool_query_events(
     """Query time-ordered immutable simulation events for a run."""
     settings = load_app_settings()
     reg = ExperimentRegistry(settings.duckdb_path)
-    df = reg.get_run_events(run_id=run_id, limit=max(limit, 1000))
+    df = _load_run_events_df(reg, run_id=run_id, limit=max(limit, 1000))
     if not df.empty:
         if event_types:
             df = df[df["event_type"].isin(event_types)]
@@ -288,7 +432,7 @@ def tool_query_events(
         if max_minute is not None:
             df = df[df["timestamp_minute"] <= max_minute]
         df = df.head(limit)
-    return {"run_id": run_id, "count": len(df), "events": list(df.to_dict(orient="records"))}
+    return {"run_id": run_id, "count": len(df), "events": _df_to_json_records(df)}
 
 
 def tool_explain_decision(run_id: str, decision_id: str | None = None) -> dict[str, Any]:
@@ -298,13 +442,13 @@ def tool_explain_decision(run_id: str, decision_id: str | None = None) -> dict[s
     runs = reg.list_runs(limit=500)
     matched = [r for r in runs if r.get("run_id") == run_id]
     if not matched:
-        raise ValueError(f"Run '{run_id}' not found in registry")
+        raise KeyError(f"Run '{run_id}' not found in registry")
     attribution: dict[str, Any] = {}
     if "metrics_json" in matched[0]:
         kpi_obj = KPIResult.model_validate_json(str(matched[0]["metrics_json"]))
         attribution = compute_cost_and_bottleneck_attribution(kpi_obj)
 
-    events_df = reg.get_run_events(run_id=run_id, limit=2000)
+    events_df = _load_run_events_df(reg, run_id=run_id, limit=2000, matched_run=matched[0])
     dec_df = (
         events_df[events_df["event_type"] == "policy_decision"]
         if not events_df.empty
@@ -366,11 +510,43 @@ def tool_create_scenario(
 
 
 def tool_validate_dataset(dataset_path: str = "data/synthetic/default") -> dict[str, Any]:
-    """Validate a dataset snapshot directory or SHA-256 manifest."""
+    """Validate reverse-logistics snapshots, SHA-256 manifests, dep directory bundles, or CSV/Parquet files."""
     target = Path(dataset_path)
-    if target.is_dir() and (target / "manifest.json").exists() and not (target / "dataset_snapshot.json").exists():
+    if not target.exists():
+        raise FileNotFoundError(f"Dataset path does not exist: {target}")
+
+    if (
+        target.is_dir()
+        and (target / "manifest.json").exists()
+        and not (target / "dataset_snapshot.json").exists()
+    ):
         manifest = verify_snapshot(target)
         return {"kind": "snapshot_manifest", "valid": True, "manifest": manifest.model_dump(mode="json")}
+
+    if target.is_file() and target.suffix.lower() in {".csv", ".parquet", ".pq"}:
+        df = read_tabular_rows_strict(target)
+        rows = validate_raw_order_rows(df.to_dict(orient="records"))
+        return {"kind": "tabular_orders", "valid": True, "order_count": len(rows), "path": str(target)}
+
+    if (
+        target.is_dir()
+        and not (target / "dataset_snapshot.json").exists()
+        and ((target / "orders.parquet").exists() or (target / "orders.csv").exists())
+    ):
+        ds = resolve_dataset_input(dataset_path=target)
+        report = validate_network_dataset(ds)
+        verified_snapshots = []
+        snap_root = target / "snapshots"
+        if snap_root.is_dir():
+            for snap_dir in sorted(snap_root.iterdir()):
+                if snap_dir.is_dir() and (snap_dir / "manifest.json").exists():
+                    verified_snapshots.append(verify_snapshot(snap_dir).model_dump(mode="json"))
+        return {
+            "kind": "bundle_directory",
+            **report.model_dump(mode="json"),
+            "verified_snapshots": verified_snapshots,
+        }
+
     ds = load_dataset_snapshot(target)
     report = validate_network_dataset(ds)
     return {"kind": "network_dataset", **report.model_dump(mode="json")}

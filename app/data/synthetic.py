@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 from datetime import UTC, datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -24,6 +25,12 @@ from app.domain.entities import (
     Vehicle,
 )
 from app.domain.enums import DispositionOutcome, HandlingClass, LocationType
+from app.routing.adapters import (
+    GeoPoint,
+    RouteMatrix,
+    get_route_matrix,
+    resolve_profile_spec,
+)
 
 
 def _euclidean_km(a: Location, b: Location) -> float:
@@ -35,6 +42,10 @@ def generate_synthetic_dataset(
     horizon_minutes: float = 4320.0,
     orders_per_day: int = 110,
     dataset_id: str = "synthetic_reverse_v1",
+    routing_provider: str | None = None,
+    routing_profile: str = "driving",
+    route_cache_path: str | Path | None = None,
+    route_matrix: RouteMatrix | None = None,
 ) -> NetworkDataset:
     """Generate a reproducible, clearly marked synthetic e-commerce reverse-logistics dataset."""
     rng = np.random.default_rng(seed)
@@ -233,13 +244,35 @@ def generate_synthetic_dataset(
     ]
 
     loc_map = {loc.location_id: loc for loc in locations}
+    matrix_sha256: str | None = None
+    dist_map: dict[tuple[str, str], float] = {}
+    dur_map: dict[tuple[str, str], float] = {}
+    profile_spec = resolve_profile_spec(routing_profile)
+
+    if route_matrix is not None or routing_provider is not None:
+        pts = [GeoPoint(location_id=loc.location_id, x_km=loc.x_km, y_km=loc.y_km) for loc in locations]
+        active_matrix = route_matrix or get_route_matrix(
+            origins=pts,
+            destinations=pts,
+            provider=routing_provider or "osrm",
+            profile=routing_profile,
+            cache_path=route_cache_path,
+        )
+        dist_map, dur_map = active_matrix.to_lane_maps()
+        matrix_sha256 = active_matrix.matrix_sha256
+
     lanes: list[Lane] = []
     for orig in locations:
         for dest in locations:
             if orig.location_id == dest.location_id:
                 continue
-            dist = round(max(1.5, _euclidean_km(orig, dest) * 1.18), 2)
-            base_mins = round(max(6.0, (dist / 42.0) * 60.0), 1)
+            pair = (orig.location_id, dest.location_id)
+            if pair in dist_map and pair in dur_map:
+                dist = round(max(1.5, dist_map[pair]), 2)
+                base_mins = round(max(6.0, dur_map[pair]), 1)
+            else:
+                dist = round(max(1.5, _euclidean_km(orig, dest) * 1.18), 2)
+                base_mins = round(max(6.0, (dist / 42.0) * 60.0), 1)
             is_cross_border = "SW" in orig.location_id or "SW" in dest.location_id
             lanes.append(
                 Lane(
@@ -250,7 +283,7 @@ def generate_synthetic_dataset(
                     base_transit_minutes=base_mins,
                     cost_per_km=1.18,
                     fixed_dispatch_cost=9.0,
-                    emission_kg_co2_per_km=0.27,
+                    emission_kg_co2_per_km=profile_spec["emission_kg_co2_per_km"],
                     is_cross_border=is_cross_border,
                     active=True,
                 )
@@ -493,17 +526,20 @@ def generate_synthetic_dataset(
             )
         )
 
-    snapshot_payload = json.dumps(
-        {
-            "dataset_id": dataset_id,
-            "seed": seed,
-            "n_orders": len(orders),
-            "n_skus": len(skus),
-            "n_locations": len(locations),
-            "first_order": orders[0].model_dump(mode="json") if orders else {},
-        },
-        sort_keys=True,
-    )
+    snapshot_dict: dict[str, object] = {
+        "dataset_id": dataset_id,
+        "seed": seed,
+        "n_orders": len(orders),
+        "n_skus": len(skus),
+        "n_locations": len(locations),
+        "first_order": orders[0].model_dump(mode="json") if orders else {},
+    }
+    if matrix_sha256 is not None:
+        snapshot_dict["route_matrix_sha256"] = matrix_sha256
+        snapshot_dict["routing_provider"] = routing_provider or (
+            route_matrix.provider if route_matrix is not None else "custom"
+        )
+    snapshot_payload = json.dumps(snapshot_dict, sort_keys=True)
     snapshot_id = hashlib.sha256(snapshot_payload.encode("utf-8")).hexdigest()[:16]
 
     return NetworkDataset(

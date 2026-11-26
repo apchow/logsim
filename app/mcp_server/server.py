@@ -28,9 +28,19 @@ def run_backtest(
     seeds: list[int] | None = None,
     experiment_name: str = "mcp_backtest",
     baseline_policy_id: str = "current_replay",
+    dataset_path: str | None = None,
+    routing_provider: str | None = None,
 ) -> dict[str, Any]:
     """Run a multi-seed paired backtest across scenarios and policies."""
-    return tool_run_backtest(scenario_ids, policy_ids, seeds, experiment_name, baseline_policy_id)
+    return tool_run_backtest(
+        scenario_ids=scenario_ids,
+        policy_ids=policy_ids,
+        seeds=seeds,
+        experiment_name=experiment_name,
+        baseline_policy_id=baseline_policy_id,
+        dataset_path=dataset_path,
+        routing_provider=routing_provider,
+    )
 
 
 @mcp.tool()
@@ -59,7 +69,7 @@ def optimize_routes(
     orders: list[dict[str, Any]],
     vehicles: list[dict[str, Any]],
     timestamp_minute: float = 600.0,
-    solver_time_limit_sec: float = 0.25,
+    solver_time_limit_sec: float = 1.0,
 ) -> dict[str, Any]:
     """Solve constrained pickup-dispatching assignment using Google OR-Tools CP-SAT."""
     return tool_optimize_routes(orders, vehicles, timestamp_minute, solver_time_limit_sec)

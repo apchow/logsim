@@ -7,7 +7,6 @@ from pathlib import Path
 from app.policies.base import BasePolicy
 from app.policies.ml.risk_scorer import MLRiskDispatchPolicy
 from app.policies.optimizers.ortools_dispatcher import ORToolsDispatchPolicy
-from app.policies.rl.ppo_policy import RLPPOPolicy
 from app.policies.rules.fifo_edf import FIFODispatchPolicy
 from app.policies.rules.fixed_batch import FixedBatchDispatchPolicy
 from app.policies.rules.greedy_cost import GreedyCostPolicy
@@ -34,21 +33,25 @@ def build_policy(
     policy_id: str,
     ppo_model_path: str | Path = "artifacts/models/ppo_reverse_dispatcher.zip",
 ) -> BasePolicy:
-    """Instantiate a registered policy by ID."""
-    mapping: dict[str, BasePolicy] = {
-        "do_nothing": DoNothingPolicy(),
-        "current_replay": CurrentPolicyReplay(),
-        "fifo_edf": FIFODispatchPolicy(),
-        "nearest_resource": NearestVehiclePolicy(),
-        "fixed_batch": FixedBatchDispatchPolicy(),
-        "greedy_cost": GreedyCostPolicy(),
-        "ortools_optimizer": ORToolsDispatchPolicy(),
-        "ml_risk_scorer": MLRiskDispatchPolicy(),
-    }
+    """Instantiate a registered policy by ID (lazy-loading torch/SB3 for PPO)."""
     if policy_id == "ppo_agent":
+        from app.policies.rl.ppo_policy import RLPPOPolicy
+
         return RLPPOPolicy(model_path=ppo_model_path)
-    if policy_id not in mapping:
+
+    builders: dict[str, type[BasePolicy]] = {
+        "do_nothing": DoNothingPolicy,
+        "current_replay": CurrentPolicyReplay,
+        "fifo_edf": FIFODispatchPolicy,
+        "nearest_resource": NearestVehiclePolicy,
+        "fixed_batch": FixedBatchDispatchPolicy,
+        "greedy_cost": GreedyCostPolicy,
+        "ortools_optimizer": ORToolsDispatchPolicy,
+        "ml_risk_scorer": MLRiskDispatchPolicy,
+    }
+    cls = builders.get(policy_id)
+    if cls is None:
         raise ValueError(
             f"Unknown policy_id='{policy_id}'. Available: {', '.join(available_policy_ids())}"
         )
-    return mapping[policy_id]
+    return cls()

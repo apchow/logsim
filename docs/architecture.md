@@ -4,7 +4,7 @@
 
 **E-commerce Reverse Pickup Dispatching & Hub Triage**
 
-At hourly decision epochs across a multi-day horizon, policies assign pending customer return orders (`Order`) to return pickup vehicles (`Vehicle` + `Driver`) or an overflow 3PL carrier. Dispatched vehicles execute multi-stop pickup routes in SimPy, arrive at return hubs (`Location`), claim dock bays (`simpy.Resource`), unload quarantine inventory (`InventoryPosition`), undergo human grading (`Picker` inspection bays), and are routed by sortation bots (`Robot`) into `restock`, `refurbish`, `liquidate`, or `recycle` outcomes.
+At hourly decision epochs across a multi-day horizon, policies assign pending customer return orders (`Order`) to return pickup vehicles (`Vehicle` + `Driver`) or an overflow 3PL carrier. Dispatched vehicles execute multi-stop pickup routes ordered via nearest-neighbor + **2-opt local refinement** in SimPy over deterministic cached OSRM/GraphHopper/Planar `RouteMatrix` snapshots, arrive at return hubs (`Location`), claim dock bays (`simpy.Resource`), unload quarantine inventory (`InventoryPosition`), undergo human grading (`Picker` inspection bays), and are routed by sortation bots (`Robot`) into `restock`, `refurbish`, `liquidate`, or `recycle` outcomes.
 
 ## System Architecture
 

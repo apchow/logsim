@@ -12,6 +12,30 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 
+PROFILE_SPECS: dict[str, dict[str, float]] = {
+    "driving": {"speed_kmph": 42.0, "circuity": 1.18, "emission_kg_co2_per_km": 0.27},
+    "van": {"speed_kmph": 44.0, "circuity": 1.16, "emission_kg_co2_per_km": 0.25},
+    "truck": {"speed_kmph": 38.0, "circuity": 1.22, "emission_kg_co2_per_km": 0.34},
+    "ev_van": {"speed_kmph": 43.0, "circuity": 1.16, "emission_kg_co2_per_km": 0.08},
+}
+
+
+def resolve_profile_spec(profile: str) -> dict[str, float]:
+    """Return speed, circuity, and emission factor for a routing profile."""
+    return PROFILE_SPECS.get(profile.lower(), PROFILE_SPECS["driving"])
+
+
+def compute_matrix_sha256(
+    distances_km: list[list[float]],
+    durations_minutes: list[list[float]],
+) -> str:
+    """Compute canonical SHA-256 checksum over distance and duration matrices."""
+    payload = json.dumps(
+        {"distances": distances_km, "durations": durations_minutes},
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 class GeoPoint(BaseModel):
     """Named coordinate point supporting planar (x_km, y_km) or WGS84 (lat, lon)."""
@@ -38,6 +62,18 @@ class RouteMatrix(BaseModel):
     matrix_sha256: str
     raw_metadata: dict[str, Any] = Field(default_factory=dict)
 
+    def to_lane_maps(
+        self,
+    ) -> tuple[dict[tuple[str, str], float], dict[tuple[str, str], float]]:
+        """Convert matrix into (distances_km, durations_minutes) dictionaries keyed by (orig, dest)."""
+        dist_map: dict[tuple[str, str], float] = {}
+        dur_map: dict[tuple[str, str], float] = {}
+        for i, orig in enumerate(self.origins):
+            for j, dest in enumerate(self.destinations):
+                dist_map[(orig, dest)] = float(self.distances_km[i][j])
+                dur_map[(orig, dest)] = float(self.durations_minutes[i][j])
+        return dist_map, dur_map
+
 
 def _compute_cache_key(
     provider: str,
@@ -62,7 +98,10 @@ def _compute_cache_key(
 
 
 def _planar_distance_and_duration(
-    a: GeoPoint, b: GeoPoint, speed_kmph: float = 42.0, circuity: float = 1.18
+    a: GeoPoint,
+    b: GeoPoint,
+    speed_kmph: float = 42.0,
+    circuity: float = 1.18,
 ) -> tuple[float, float]:
     if a.location_id == b.location_id:
         return 0.0, 0.0
@@ -78,16 +117,16 @@ def _planar_distance_and_duration(
 
 
 class RoutingAdapter(ABC):
-    """Deterministic routing adapter interface with persistent matrix caching."""
+    """Deterministic routing adapter interface with optional persistent matrix caching."""
 
     provider_name: str
     api_version: str
 
-    def __init__(self, cache_path: str | Path = "artifacts/cache/route_cache.json") -> None:
-        self.cache_path = Path(cache_path)
+    def __init__(self, cache_path: str | Path | None = "artifacts/cache/route_cache.json") -> None:
+        self.cache_path = Path(cache_path) if cache_path is not None else None
 
     def _load_cache(self) -> dict[str, dict[str, Any]]:
-        if not self.cache_path.exists():
+        if self.cache_path is None or not self.cache_path.exists():
             return {}
         try:
             data = json.loads(self.cache_path.read_text(encoding="utf-8"))
@@ -96,8 +135,22 @@ class RoutingAdapter(ABC):
             return {}
 
     def _save_cache(self, cache: dict[str, dict[str, Any]]) -> None:
+        if self.cache_path is None:
+            return
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.cache_path.write_text(json.dumps(cache, indent=2, sort_keys=True), encoding="utf-8")
+
+    def _planar_fallback(
+        self,
+        origins: list[GeoPoint],
+        destinations: list[GeoPoint],
+        profile: str,
+        extra_meta: dict[str, Any],
+    ) -> tuple[list[list[float]], list[list[float]], dict[str, Any]]:
+        dists, durs, meta = PlanarCachedAdapter(cache_path=None)._fetch_matrix(
+            origins, destinations, profile
+        )
+        return dists, durs, {**meta, **extra_meta}
 
     @abstractmethod
     def _fetch_matrix(
@@ -127,9 +180,7 @@ class RoutingAdapter(ABC):
             return RouteMatrix.model_validate(entry)
 
         distances, durations, meta = self._fetch_matrix(origins, destinations, profile)
-        matrix_sha = hashlib.sha256(
-            json.dumps({"distances": distances, "durations": durations}, sort_keys=True).encode("utf-8")
-        ).hexdigest()
+        matrix_sha = compute_matrix_sha256(distances, durations)
 
         matrix = RouteMatrix(
             provider=self.provider_name,
@@ -161,19 +212,27 @@ class PlanarCachedAdapter(RoutingAdapter):
         destinations: list[GeoPoint],
         profile: str,
     ) -> tuple[list[list[float]], list[list[float]], dict[str, Any]]:
-        speed = 38.0 if profile == "truck" else 42.0
+        spec = resolve_profile_spec(profile)
+        speed = spec["speed_kmph"]
+        circuity = spec["circuity"]
         distances: list[list[float]] = []
         durations: list[list[float]] = []
         for orig in origins:
             d_row: list[float] = []
             t_row: list[float] = []
             for dest in destinations:
-                dist, dur = _planar_distance_and_duration(orig, dest, speed_kmph=speed)
+                dist, dur = _planar_distance_and_duration(
+                    orig, dest, speed_kmph=speed, circuity=circuity
+                )
                 d_row.append(dist)
                 t_row.append(dur)
             distances.append(d_row)
             durations.append(t_row)
-        return distances, durations, {"source": "deterministic_planar", "speed_kmph": speed}
+        return distances, durations, {
+            "source": "deterministic_planar",
+            "speed_kmph": speed,
+            "circuity": circuity,
+        }
 
 
 class OSRMClientAdapter(RoutingAdapter):
@@ -185,7 +244,7 @@ class OSRMClientAdapter(RoutingAdapter):
     def __init__(
         self,
         base_url: str | None = None,
-        cache_path: str | Path = "artifacts/cache/route_cache.json",
+        cache_path: str | Path | None = "artifacts/cache/route_cache.json",
         timeout_sec: float = 4.0,
     ) -> None:
         super().__init__(cache_path=cache_path)
@@ -222,18 +281,14 @@ class OSRMClientAdapter(RoutingAdapter):
                         durs = [[round(float(x) / 60.0, 2) for x in r] for r in body["durations"]]
                         return dists, durs, {"source": "osrm_http", "base_url": self.base_url}
             except Exception as exc:
-                fallback_dists, fallback_durs, _ = PlanarCachedAdapter(self.cache_path)._fetch_matrix(
-                    origins, destinations, profile
+                return self._planar_fallback(
+                    origins,
+                    destinations,
+                    profile,
+                    {"source": "osrm_offline_fallback", "error": type(exc).__name__},
                 )
-                return fallback_dists, fallback_durs, {
-                    "source": "osrm_offline_fallback",
-                    "error": type(exc).__name__,
-                }
 
-        dists, durs, meta = PlanarCachedAdapter(self.cache_path)._fetch_matrix(
-            origins, destinations, profile
-        )
-        return dists, durs, {**meta, "adapter": "osrm_fallback"}
+        return self._planar_fallback(origins, destinations, profile, {"adapter": "osrm_fallback"})
 
 
 class GraphHopperClientAdapter(RoutingAdapter):
@@ -246,7 +301,7 @@ class GraphHopperClientAdapter(RoutingAdapter):
         self,
         base_url: str | None = None,
         api_key: str | None = None,
-        cache_path: str | Path = "artifacts/cache/route_cache.json",
+        cache_path: str | Path | None = "artifacts/cache/route_cache.json",
         timeout_sec: float = 4.0,
     ) -> None:
         super().__init__(cache_path=cache_path)
@@ -283,18 +338,16 @@ class GraphHopperClientAdapter(RoutingAdapter):
                         durs = [[round(float(x) / 60000.0, 2) for x in r] for r in body["times"]]
                         return dists, durs, {"source": "graphhopper_http", "base_url": self.base_url}
             except Exception as exc:
-                fallback_dists, fallback_durs, _ = PlanarCachedAdapter(self.cache_path)._fetch_matrix(
-                    origins, destinations, profile
+                return self._planar_fallback(
+                    origins,
+                    destinations,
+                    profile,
+                    {"source": "graphhopper_offline_fallback", "error": type(exc).__name__},
                 )
-                return fallback_dists, fallback_durs, {
-                    "source": "graphhopper_offline_fallback",
-                    "error": type(exc).__name__,
-                }
 
-        dists, durs, meta = PlanarCachedAdapter(self.cache_path)._fetch_matrix(
-            origins, destinations, profile
+        return self._planar_fallback(
+            origins, destinations, profile, {"adapter": "graphhopper_fallback"}
         )
-        return dists, durs, {**meta, "adapter": "graphhopper_fallback"}
 
 
 def get_route_matrix(
@@ -304,7 +357,7 @@ def get_route_matrix(
     profile: str = "driving",
     departure_minute: float = 0.0,
     base_url: str | None = None,
-    cache_path: str | Path = "artifacts/cache/route_cache.json",
+    cache_path: str | Path | None = "artifacts/cache/route_cache.json",
 ) -> RouteMatrix:
     """Resolve and execute a cached deterministic routing adapter."""
     prov = provider.lower()

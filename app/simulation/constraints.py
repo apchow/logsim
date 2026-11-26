@@ -69,7 +69,8 @@ class ConstraintGuard:
         batch_weight: dict[str, float] = {vid: 0.0 for vid in vehicle_states}
         batch_volume: dict[str, float] = {vid: 0.0 for vid in vehicle_states}
         batch_units: dict[str, int] = {vid: 0 for vid in vehicle_states}
-        batch_minutes: dict[str, float] = {vid: 0.0 for vid in vehicle_states}
+        batch_min_est: dict[str, float] = {}
+        batch_045_sum: dict[str, float] = {vid: 0.0 for vid in vehicle_states}
         batch_hub_units: dict[str, int] = dict(hub_storage_free)
         seen_orders: set[str] = set()
 
@@ -157,17 +158,20 @@ class ConstraintGuard:
                 accepted.append(OrderAssignment(order_id=order.order_id, action_type="defer"))
                 continue
 
-            # Estimate HOS impact
+            # Order-invariant batch HOS check: 1.0x for shortest trunk + 0.45x per additional stop
             est_leg_min = float(
                 lane_minutes_fn(vst.current_location_id, order.origin_id)
                 + lane_minutes_fn(order.origin_id, order.destination_hub_id)
                 + 15.0
             )
-            incremental_min = est_leg_min if batch_units[veh.vehicle_id] == 0 else est_leg_min * 0.45
-            if (
-                vst.worked_minutes_today + batch_minutes[veh.vehicle_id] + incremental_min
-                > vst.max_shift_minutes
-            ):
+            new_min_est = (
+                est_leg_min
+                if batch_units[veh.vehicle_id] == 0
+                else min(batch_min_est[veh.vehicle_id], est_leg_min)
+            )
+            new_045_sum = batch_045_sum[veh.vehicle_id] + 0.45 * est_leg_min
+            total_batch_min = 0.55 * new_min_est + new_045_sum
+            if vst.worked_minutes_today + total_batch_min > vst.max_shift_minutes:
                 violations += 1
                 reasons.append(f"driver_hos_exceeded:{veh.vehicle_id}:{order.order_id}")
                 accepted.append(OrderAssignment(order_id=order.order_id, action_type="defer"))
@@ -177,7 +181,8 @@ class ConstraintGuard:
             batch_weight[veh.vehicle_id] = new_w
             batch_volume[veh.vehicle_id] = new_v
             batch_units[veh.vehicle_id] = new_u
-            batch_minutes[veh.vehicle_id] += incremental_min
+            batch_min_est[veh.vehicle_id] = new_min_est
+            batch_045_sum[veh.vehicle_id] = new_045_sum
             batch_hub_units[order.destination_hub_id] = hub_free - order.quantity
             accepted.append(item)
 

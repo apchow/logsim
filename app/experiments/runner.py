@@ -30,6 +30,7 @@ from app.experiments.registry import (
 )
 from app.policies.base import BasePolicy
 from app.policies.registry import build_policy
+from app.routing.adapters import RouteMatrix
 from app.simulation.env import ReverseLogisticsEnv
 
 
@@ -42,6 +43,9 @@ def run_single_episode(
     experiment_name: str = "ad_hoc_sim",
     registry: ExperimentRegistry | None = None,
     persist_events_to_db: bool = True,
+    routing_provider: str | None = None,
+    routing_profile: str = "driving",
+    route_matrix: RouteMatrix | None = None,
 ) -> ExperimentRun:
     """Run one deterministic episode through the Gymnasium interface and log all artifacts."""
     settings.ensure_dirs()
@@ -49,6 +53,7 @@ def run_single_episode(
     started_at = datetime.now(UTC)
     t0 = time.perf_counter()
 
+    cache_path = settings.artifacts_dir / "cache" / "route_cache.json" if routing_provider else None
     env = ReverseLogisticsEnv(
         dataset=dataset,
         scenario=scenario,
@@ -58,6 +63,10 @@ def run_single_episode(
         policy_version=policy.policy_version,
         seed=seed,
         run_id=run_id,
+        routing_provider=routing_provider,
+        routing_profile=routing_profile,
+        route_matrix=route_matrix,
+        route_cache_path=cache_path,
     )
     policy.reset(seed=seed)
     obs, info = env.reset(seed=seed)
@@ -95,6 +104,8 @@ def run_single_episode(
             "policy_version": policy.policy_version,
             "seed": seed,
             "snapshot_id": dataset.snapshot_id,
+            "routing_provider": env.simulator.routing_provider,
+            "route_matrix_sha256": env.simulator.route_matrix_sha256,
         }
     )
 
@@ -117,7 +128,11 @@ def run_single_episode(
         finished_at=finished_at,
         runtime_seconds=runtime_sec,
         metrics=kpi,
-        artifact_paths={"events_parquet": str(events_path)},
+        artifact_paths={
+            "events_parquet": str(events_path),
+            "routing_provider": env.simulator.routing_provider,
+            "route_matrix_sha256": env.simulator.route_matrix_sha256,
+        },
     )
 
     if settings.mlflow_enabled:
@@ -153,6 +168,8 @@ def run_backtest_suite(
     settings: AppSettings,
     experiment_name: str = "reverse_backtest",
     baseline_policy_id: str = "current_replay",
+    routing_provider: str | None = None,
+    routing_profile: str = "driving",
 ) -> BacktestSuiteResult:
     """Run paired multi-seed experiments across policies & scenarios and generate reports."""
     settings.ensure_dirs()
@@ -172,6 +189,8 @@ def run_backtest_suite(
                     experiment_name=experiment_name,
                     registry=registry,
                     persist_events_to_db=(seed == seeds[0]),
+                    routing_provider=routing_provider,
+                    routing_profile=routing_profile,
                 )
                 runs.append(run)
 
