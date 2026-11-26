@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "OrderAssignment": {
+      "description": "Single order dispatching decision emitted by a policy.",
+      "properties": {
+        "order_id": {
+          "title": "Order Id",
+          "type": "string"
+        },
+        "vehicle_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vehicle Id"
+        },
+        "action_type": {
+          "enum": [
+            "dispatch",
+            "defer",
+            "overflow_carrier"
+          ],
+          "title": "Action Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "order_id",
+        "action_type"
+      ],
+      "title": "OrderAssignment",
+      "type": "object"
+    },
+    "PolicyType": {
+      "description": "Policy families supported by the backtester.",
+      "enum": [
+        "current_replay",
+        "rule_based",
+        "optimizer",
+        "ml",
+        "rl"
+      ],
+      "title": "PolicyType",
+      "type": "string"
+    }
+  },
+  "description": "Recorded decision epoch payload from a policy with causal observation SHA-256.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "timestamp_minute": {
+      "minimum": 0,
+      "title": "Timestamp Minute",
+      "type": "number"
+    },
+    "epoch_index": {
+      "minimum": 0,
+      "title": "Epoch Index",
+      "type": "integer"
+    },
+    "policy_id": {
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "policy_type": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PolicyType"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Policy Type"
+    },
+    "policy_version": {
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "observation_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observation Hash"
+    },
+    "assignments": {
+      "items": {
+        "$ref": "#/$defs/OrderAssignment"
+      },
+      "title": "Assignments",
+      "type": "array"
+    },
+    "feasible": {
+      "default": true,
+      "title": "Feasible",
+      "type": "boolean"
+    },
+    "violation_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Violation Count",
+      "type": "integer"
+    },
+    "violation_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Violation Reasons",
+      "type": "array"
+    },
+    "solver_time_ms": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Solver Time Ms",
+      "type": "number"
+    }
+  },
+  "required": [
+    "timestamp_minute",
+    "epoch_index",
+    "policy_id",
+    "policy_type",
+    "policy_version"
+  ],
+  "title": "PolicyDecision",
+  "type": "object"
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "snapshot_id": "14cacda6a48712ddeb2101b5ebdab70e6b5fdcaf6b00fcfb09891902a044fa9e",
+  "synthetic": true,
+  "source_sha256": "21b57e564fb9362e0349ff5eef21939ec6b4e36f4dd54e2f425130ec2eff16d2",
+  "source_name": "orders.parquet",
+  "row_count": 100,
+  "canonical_sha256": "25d4c86e41b11b164381b7c5d7bd8b4e16f44c8be48e2a51f1958169e9f60b11",
+  "generator_version": null,
+  "seed": null
+}

@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "LocationType": {
+      "description": "Node types in the reverse & forward logistics network.",
+      "enum": [
+        "customer_zone",
+        "dropoff_point",
+        "return_hub",
+        "refurb_center",
+        "liquidation_depot",
+        "recycling_facility",
+        "depot",
+        "customer",
+        "hub",
+        "warehouse",
+        "port"
+      ],
+      "title": "LocationType",
+      "type": "string"
+    }
+  },
+  "description": "Network location: customer pickup zone, drop-off point, return hub, or disposition node.",
+  "properties": {
+    "location_id": {
+      "title": "Location Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "location_type": {
+      "$ref": "#/$defs/LocationType"
+    },
+    "x_km": {
+      "title": "X Km",
+      "type": "number"
+    },
+    "y_km": {
+      "title": "Y Km",
+      "type": "number"
+    },
+    "dock_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Dock Count",
+      "type": "integer"
+    },
+    "inspection_bays": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Inspection Bays",
+      "type": "integer"
+    },
+    "robot_units": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Robot Units",
+      "type": "integer"
+    },
+    "storage_capacity_units": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Storage Capacity Units",
+      "type": "integer"
+    },
+    "calendar_id": {
+      "default": "cal_standard",
+      "title": "Calendar Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "location_id",
+    "name",
+    "location_type",
+    "x_km",
+    "y_km"
+  ],
+  "title": "Location",
+  "type": "object"
+}

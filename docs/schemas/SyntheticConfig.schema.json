@@ -1,0 +1,39 @@
+{
+  "description": "Explicitly seeded synthetic reverse-logistics generation configuration.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "horizon_minutes": {
+      "default": 4320.0,
+      "exclusiveMinimum": 0,
+      "title": "Horizon Minutes",
+      "type": "number"
+    },
+    "orders_per_day": {
+      "default": 110,
+      "maximum": 5000,
+      "minimum": 10,
+      "title": "Orders Per Day",
+      "type": "integer"
+    },
+    "dataset_id": {
+      "default": "synthetic_reverse_v1",
+      "title": "Dataset Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "seed"
+  ],
+  "title": "SyntheticConfig",
+  "type": "object"
+}

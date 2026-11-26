@@ -1,0 +1,19 @@
+{
+  "assumptions": [
+    "Euclidean km, not roads",
+    "30 km/h constant nominal speed",
+    "currency-neutral cost units",
+    "no observed carbon data",
+    "no guarantee all demand is operationally feasible"
+  ],
+  "config": {
+    "customers": 20,
+    "orders": 100,
+    "schema_version": "1.0",
+    "seed": 42,
+    "start_at": "2026-01-01T06:00:00Z",
+    "vehicles": 5
+  },
+  "generator_version": "1.0.0",
+  "synthetic": true
+}

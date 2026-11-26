@@ -1,0 +1,31 @@
+{
+  "description": "Autonomous mobile / sortation robot moving graded returns into disposition bins.",
+  "properties": {
+    "robot_id": {
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "hub_id": {
+      "title": "Hub Id",
+      "type": "string"
+    },
+    "max_payload_kg": {
+      "default": 50.0,
+      "exclusiveMinimum": 0,
+      "title": "Max Payload Kg",
+      "type": "number"
+    },
+    "move_minutes_per_task": {
+      "default": 2.5,
+      "exclusiveMinimum": 0,
+      "title": "Move Minutes Per Task",
+      "type": "number"
+    }
+  },
+  "required": [
+    "robot_id",
+    "hub_id"
+  ],
+  "title": "Robot",
+  "type": "object"
+}

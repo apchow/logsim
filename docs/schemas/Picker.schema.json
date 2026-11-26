@@ -1,0 +1,30 @@
+{
+  "description": "Human warehouse return inspector / grader at a hub.",
+  "properties": {
+    "picker_id": {
+      "title": "Picker Id",
+      "type": "string"
+    },
+    "hub_id": {
+      "title": "Hub Id",
+      "type": "string"
+    },
+    "inspection_speed_multiplier": {
+      "default": 1.0,
+      "exclusiveMinimum": 0,
+      "title": "Inspection Speed Multiplier",
+      "type": "number"
+    },
+    "calendar_id": {
+      "default": "cal_hub_shift",
+      "title": "Calendar Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "picker_id",
+    "hub_id"
+  ],
+  "title": "Picker",
+  "type": "object"
+}

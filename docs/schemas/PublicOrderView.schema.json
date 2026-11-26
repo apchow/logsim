@@ -1,0 +1,124 @@
+{
+  "$defs": {
+    "HandlingClass": {
+      "description": "Physical and safety handling classification of returned SKUs.",
+      "enum": [
+        "standard",
+        "fragile",
+        "hazmat_battery"
+      ],
+      "title": "HandlingClass",
+      "type": "string"
+    },
+    "OrderStatus": {
+      "description": "Lifecycle states of a reverse-logistics return order.",
+      "enum": [
+        "pending",
+        "assigned",
+        "in_transit",
+        "at_dock",
+        "in_inspection",
+        "sorting",
+        "completed",
+        "cancelled"
+      ],
+      "title": "OrderStatus",
+      "type": "string"
+    }
+  },
+  "description": "Leakage-free view of an active order visible to decision policies at timestamp t.",
+  "properties": {
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "sku_id": {
+      "title": "Sku Id",
+      "type": "string"
+    },
+    "category": {
+      "title": "Category",
+      "type": "string"
+    },
+    "quantity": {
+      "title": "Quantity",
+      "type": "integer"
+    },
+    "total_weight_kg": {
+      "title": "Total Weight Kg",
+      "type": "number"
+    },
+    "total_volume_m3": {
+      "title": "Total Volume M3",
+      "type": "number"
+    },
+    "handling_class": {
+      "$ref": "#/$defs/HandlingClass"
+    },
+    "requires_safety_segregation": {
+      "title": "Requires Safety Segregation",
+      "type": "boolean"
+    },
+    "origin_id": {
+      "title": "Origin Id",
+      "type": "string"
+    },
+    "destination_hub_id": {
+      "title": "Destination Hub Id",
+      "type": "string"
+    },
+    "created_minute": {
+      "title": "Created Minute",
+      "type": "number"
+    },
+    "promise_window_start_minute": {
+      "title": "Promise Window Start Minute",
+      "type": "number"
+    },
+    "promise_window_end_minute": {
+      "title": "Promise Window End Minute",
+      "type": "number"
+    },
+    "reported_condition": {
+      "title": "Reported Condition",
+      "type": "string"
+    },
+    "priority": {
+      "title": "Priority",
+      "type": "integer"
+    },
+    "unit_value_usd": {
+      "title": "Unit Value Usd",
+      "type": "number"
+    },
+    "estimated_distance_km": {
+      "title": "Estimated Distance Km",
+      "type": "number"
+    },
+    "status": {
+      "$ref": "#/$defs/OrderStatus"
+    }
+  },
+  "required": [
+    "order_id",
+    "sku_id",
+    "category",
+    "quantity",
+    "total_weight_kg",
+    "total_volume_m3",
+    "handling_class",
+    "requires_safety_segregation",
+    "origin_id",
+    "destination_hub_id",
+    "created_minute",
+    "promise_window_start_minute",
+    "promise_window_end_minute",
+    "reported_condition",
+    "priority",
+    "unit_value_usd",
+    "estimated_distance_km",
+    "status"
+  ],
+  "title": "PublicOrderView",
+  "type": "object"
+}

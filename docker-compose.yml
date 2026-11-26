@@ -1,0 +1,25 @@
+services:
+  api:
+    build: .
+    container_name: logisticsbt-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./configs:/app/configs
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  dashboard:
+    build: .
+    container_name: logisticsbt-dashboard
+    ports:
+      - "7860:7860"
+      - "8501:8501"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./configs:/app/configs
+    command: ["python", "-m", "app.dashboard.gradio_app"]
+    depends_on:
+      - api

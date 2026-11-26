@@ -1,0 +1,73 @@
+{
+  "description": "Dispatched shipment batch linking vehicle, hub, orders, and miles.",
+  "properties": {
+    "shipment_id": {
+      "title": "Shipment Id",
+      "type": "string"
+    },
+    "vehicle_id": {
+      "title": "Vehicle Id",
+      "type": "string"
+    },
+    "hub_id": {
+      "title": "Hub Id",
+      "type": "string"
+    },
+    "order_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Order Ids",
+      "type": "array"
+    },
+    "dispatched_minute": {
+      "minimum": 0,
+      "title": "Dispatched Minute",
+      "type": "number"
+    },
+    "delivered_minute": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivered Minute"
+    },
+    "distance_km": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Distance Km",
+      "type": "number"
+    },
+    "empty_km": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Empty Km",
+      "type": "number"
+    },
+    "status": {
+      "default": "open",
+      "enum": [
+        "open",
+        "completed",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "shipment_id",
+    "vehicle_id",
+    "hub_id",
+    "order_ids",
+    "dispatched_minute"
+  ],
+  "title": "Shipment",
+  "type": "object"
+}

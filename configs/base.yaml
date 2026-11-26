@@ -1,0 +1,33 @@
+project_name: logistics-backtester
+domain: reverse_pickup_and_hub_triage
+artifacts_dir: artifacts
+data_dir: data
+duckdb_path: artifacts/registry.duckdb
+mlflow_tracking_uri: "file:./artifacts/mlruns"
+mlflow_enabled: true
+default_seeds: [101, 202, 303, 404, 505]
+simulation:
+  horizon_minutes: 4320.0
+  decision_interval_minutes: 60.0
+  max_visible_orders: 10
+  max_vehicles_in_obs: 6
+  overflow_carrier_cost_per_order: 42.0
+  overflow_carrier_transit_minutes: 240.0
+  late_penalty_per_hour: 8.0
+  unserved_penalty_per_order: 55.0
+  violation_penalty_per_attempt: 35.0
+  holding_cost_per_unit_hour: 0.05
+  stockout_penalty_per_unit: 25.0
+  empty_mile_cost_factor: 0.45
+rl:
+  total_timesteps: 25000
+  learning_rate: 0.0003
+  n_steps: 512
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01
+  net_arch: [128, 128]
+  model_output_path: artifacts/models/ppo_reverse_dispatcher.zip

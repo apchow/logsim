@@ -1,0 +1,64 @@
+{
+  "description": "Directed transport lane connecting two locations.",
+  "properties": {
+    "lane_id": {
+      "title": "Lane Id",
+      "type": "string"
+    },
+    "origin_id": {
+      "title": "Origin Id",
+      "type": "string"
+    },
+    "destination_id": {
+      "title": "Destination Id",
+      "type": "string"
+    },
+    "distance_km": {
+      "minimum": 0,
+      "title": "Distance Km",
+      "type": "number"
+    },
+    "base_transit_minutes": {
+      "minimum": 0,
+      "title": "Base Transit Minutes",
+      "type": "number"
+    },
+    "cost_per_km": {
+      "minimum": 0,
+      "title": "Cost Per Km",
+      "type": "number"
+    },
+    "fixed_dispatch_cost": {
+      "default": 12.0,
+      "minimum": 0,
+      "title": "Fixed Dispatch Cost",
+      "type": "number"
+    },
+    "emission_kg_co2_per_km": {
+      "default": 0.27,
+      "minimum": 0,
+      "title": "Emission Kg Co2 Per Km",
+      "type": "number"
+    },
+    "is_cross_border": {
+      "default": false,
+      "title": "Is Cross Border",
+      "type": "boolean"
+    },
+    "active": {
+      "default": true,
+      "title": "Active",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "lane_id",
+    "origin_id",
+    "destination_id",
+    "distance_km",
+    "base_transit_minutes",
+    "cost_per_km"
+  ],
+  "title": "Lane",
+  "type": "object"
+}

@@ -1,0 +1,82 @@
+scenarios:
+  - scenario_id: baseline_normal
+    version: "1.0.0"
+    name: Baseline Reverse Flow
+    description: Normal 3-day reverse parcel pickup and hub triage operations with standard SLAs.
+    horizon_minutes: 4320.0
+    decision_interval_minutes: 60.0
+    overlays: []
+    is_synthetic: true
+
+  - scenario_id: peak_surge_breakdown
+    version: "1.0.0"
+    name: Post-Holiday Surge & Vehicle Breakdown
+    description: 1.45x return demand surge, mid-horizon vehicle breakdown, and 25% inspection labor absence.
+    horizon_minutes: 4320.0
+    decision_interval_minutes: 60.0
+    overlays:
+      - overlay_type: demand_multiplier
+        start_minute: 360.0
+        end_minute: 3600.0
+        value: 1.45
+      - overlay_type: vehicle_breakdown
+        start_minute: 1200.0
+        end_minute: 2160.0
+        target_id: VEH-02
+        value: 1.0
+      - overlay_type: labor_absence
+        start_minute: 720.0
+        end_minute: 2880.0
+        value: 0.25
+    is_synthetic: true
+
+  - scenario_id: storm_tight_sla
+    version: "1.0.0"
+    name: Severe Weather + Dock Reduction + Tight Promise
+    description: Weather transit slowdown, 40% dock/hub capacity drop, carrier delay, and stricter pickup SLA.
+    horizon_minutes: 4320.0
+    decision_interval_minutes: 60.0
+    overlays:
+      - overlay_type: weather_disruption
+        start_minute: 900.0
+        end_minute: 2400.0
+        value: 1.5
+      - overlay_type: warehouse_capacity_reduction
+        start_minute: 900.0
+        end_minute: 2400.0
+        target_id: HUB-NORTH
+        value: 0.4
+      - overlay_type: carrier_delay
+        start_minute: 600.0
+        end_minute: 3000.0
+        value: 1.3
+      - overlay_type: new_customer_promise_policy
+        start_minute: 0.0
+        value: 0.75
+    is_synthetic: true
+
+  - scenario_id: hazmat_mix_customs_shock
+    version: "1.0.0"
+    name: Battery Return Shift + Customs & SKU Shock
+    description: Shift toward hazmat battery returns, cross-border customs delay, lead-time increase, and refurb-kit stockout shock.
+    horizon_minutes: 4320.0
+    decision_interval_minutes: 60.0
+    overlays:
+      - overlay_type: demand_mix_shift
+        start_minute: 0.0
+        value: 0.35
+        params:
+          hazmat_share: 0.35
+      - overlay_type: port_customs_delay
+        start_minute: 480.0
+        end_minute: 3200.0
+        value: 1.8
+      - overlay_type: lead_time_increase
+        start_minute: 480.0
+        end_minute: 3200.0
+        value: 1.4
+      - overlay_type: sku_availability_shock
+        start_minute: 1440.0
+        end_minute: 2880.0
+        value: 0.8
+    is_synthetic: true

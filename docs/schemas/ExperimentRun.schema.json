@@ -1,0 +1,350 @@
+{
+  "$defs": {
+    "KPIResult": {
+      "description": "Full KPI summary computed from a completed simulation run's immutable event log.",
+      "properties": {
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "policy_id": {
+          "title": "Policy Id",
+          "type": "string"
+        },
+        "policy_version": {
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "scenario_id": {
+          "title": "Scenario Id",
+          "type": "string"
+        },
+        "scenario_version": {
+          "title": "Scenario Version",
+          "type": "string"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "total_orders": {
+          "minimum": 0,
+          "title": "Total Orders",
+          "type": "integer"
+        },
+        "completed_orders": {
+          "minimum": 0,
+          "title": "Completed Orders",
+          "type": "integer"
+        },
+        "on_time_orders": {
+          "minimum": 0,
+          "title": "On Time Orders",
+          "type": "integer"
+        },
+        "late_orders": {
+          "minimum": 0,
+          "title": "Late Orders",
+          "type": "integer"
+        },
+        "cancelled_orders": {
+          "minimum": 0,
+          "title": "Cancelled Orders",
+          "type": "integer"
+        },
+        "on_time_delivery_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "On Time Delivery Rate",
+          "type": "number"
+        },
+        "fill_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fill Rate",
+          "type": "number"
+        },
+        "cost_per_order": {
+          "minimum": 0,
+          "title": "Cost Per Order",
+          "type": "number"
+        },
+        "total_cost": {
+          "minimum": 0,
+          "title": "Total Cost",
+          "type": "number"
+        },
+        "transport_cost": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Transport Cost",
+          "type": "number"
+        },
+        "holding_cost": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Holding Cost",
+          "type": "number"
+        },
+        "processing_cost": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Processing Cost",
+          "type": "number"
+        },
+        "penalty_cost": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Penalty Cost",
+          "type": "number"
+        },
+        "recovery_value": {
+          "minimum": 0,
+          "title": "Recovery Value",
+          "type": "number"
+        },
+        "net_cost_after_recovery": {
+          "title": "Net Cost After Recovery",
+          "type": "number"
+        },
+        "resource_utilization": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Resource Utilization",
+          "type": "number"
+        },
+        "dock_utilization": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Dock Utilization",
+          "type": "number"
+        },
+        "inspector_utilization": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Inspector Utilization",
+          "type": "number"
+        },
+        "throughput_orders_per_day": {
+          "minimum": 0,
+          "title": "Throughput Orders Per Day",
+          "type": "number"
+        },
+        "avg_cycle_time_minutes": {
+          "minimum": 0,
+          "title": "Avg Cycle Time Minutes",
+          "type": "number"
+        },
+        "p95_cycle_time_minutes": {
+          "minimum": 0,
+          "title": "P95 Cycle Time Minutes",
+          "type": "number"
+        },
+        "stockouts": {
+          "minimum": 0,
+          "title": "Stockouts",
+          "type": "integer"
+        },
+        "backorders": {
+          "minimum": 0,
+          "title": "Backorders",
+          "type": "integer"
+        },
+        "empty_miles_km": {
+          "minimum": 0,
+          "title": "Empty Miles Km",
+          "type": "number"
+        },
+        "total_miles_km": {
+          "minimum": 0,
+          "title": "Total Miles Km",
+          "type": "number"
+        },
+        "carbon_kg_co2": {
+          "minimum": 0,
+          "title": "Carbon Kg Co2",
+          "type": "number"
+        },
+        "constraint_violations": {
+          "minimum": 0,
+          "title": "Constraint Violations",
+          "type": "integer"
+        },
+        "exceptions_raised": {
+          "minimum": 0,
+          "title": "Exceptions Raised",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "run_id",
+        "policy_id",
+        "policy_version",
+        "scenario_id",
+        "scenario_version",
+        "seed",
+        "total_orders",
+        "completed_orders",
+        "on_time_orders",
+        "late_orders",
+        "cancelled_orders",
+        "on_time_delivery_rate",
+        "fill_rate",
+        "cost_per_order",
+        "total_cost",
+        "recovery_value",
+        "net_cost_after_recovery",
+        "resource_utilization",
+        "dock_utilization",
+        "inspector_utilization",
+        "throughput_orders_per_day",
+        "avg_cycle_time_minutes",
+        "p95_cycle_time_minutes",
+        "stockouts",
+        "backorders",
+        "empty_miles_km",
+        "total_miles_km",
+        "carbon_kg_co2",
+        "constraint_violations",
+        "exceptions_raised"
+      ],
+      "title": "KPIResult",
+      "type": "object"
+    }
+  },
+  "description": "Reproducible experiment run ledger record.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "experiment_name": {
+      "title": "Experiment Name",
+      "type": "string"
+    },
+    "config_hash": {
+      "title": "Config Hash",
+      "type": "string"
+    },
+    "git_commit": {
+      "title": "Git Commit",
+      "type": "string"
+    },
+    "git_dirty": {
+      "default": false,
+      "title": "Git Dirty",
+      "type": "boolean"
+    },
+    "dependency_lock_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dependency Lock Hash"
+    },
+    "data_snapshot_id": {
+      "title": "Data Snapshot Id",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "policy_id": {
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "policy_type": {
+      "title": "Policy Type",
+      "type": "string"
+    },
+    "policy_version": {
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "scenario_id": {
+      "title": "Scenario Id",
+      "type": "string"
+    },
+    "scenario_version": {
+      "title": "Scenario Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "title": "Finished At",
+      "type": "string"
+    },
+    "runtime_seconds": {
+      "minimum": 0,
+      "title": "Runtime Seconds",
+      "type": "number"
+    },
+    "metrics": {
+      "$ref": "#/$defs/KPIResult"
+    },
+    "artifact_paths": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Artifact Paths",
+      "type": "object"
+    },
+    "mlflow_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mlflow Run Id"
+    }
+  },
+  "required": [
+    "run_id",
+    "experiment_name",
+    "config_hash",
+    "git_commit",
+    "data_snapshot_id",
+    "seed",
+    "policy_id",
+    "policy_type",
+    "policy_version",
+    "scenario_id",
+    "scenario_version",
+    "status",
+    "started_at",
+    "finished_at",
+    "runtime_seconds",
+    "metrics"
+  ],
+  "title": "ExperimentRun",
+  "type": "object"
+}

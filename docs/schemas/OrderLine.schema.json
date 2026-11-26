@@ -1,0 +1,25 @@
+{
+  "description": "Optional multi-line SKU quantity item compatible with directory ingestion.",
+  "properties": {
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "sku_id": {
+      "title": "Sku Id",
+      "type": "string"
+    },
+    "quantity": {
+      "exclusiveMinimum": 0,
+      "title": "Quantity",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "order_id",
+    "sku_id",
+    "quantity"
+  ],
+  "title": "OrderLine",
+  "type": "object"
+}

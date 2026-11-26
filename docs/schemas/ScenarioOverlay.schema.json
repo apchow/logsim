@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "OverlayType": {
+      "description": "Supported versioned scenario overlay types.",
+      "enum": [
+        "demand_multiplier",
+        "demand_mix_shift",
+        "carrier_delay",
+        "lead_time_increase",
+        "warehouse_capacity_reduction",
+        "labor_absence",
+        "vehicle_breakdown",
+        "port_customs_delay",
+        "weather_disruption",
+        "sku_availability_shock",
+        "new_customer_promise_policy"
+      ],
+      "title": "OverlayType",
+      "type": "string"
+    }
+  },
+  "description": "Composable, versioned operational perturbation or policy change.",
+  "properties": {
+    "overlay_type": {
+      "$ref": "#/$defs/OverlayType"
+    },
+    "start_minute": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Start Minute",
+      "type": "number"
+    },
+    "end_minute": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "End Minute"
+    },
+    "target_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Id"
+    },
+    "value": {
+      "default": 1.0,
+      "title": "Value",
+      "type": "number"
+    },
+    "params": {
+      "additionalProperties": true,
+      "title": "Params",
+      "type": "object"
+    }
+  },
+  "required": [
+    "overlay_type"
+  ],
+  "title": "ScenarioOverlay",
+  "type": "object"
+}

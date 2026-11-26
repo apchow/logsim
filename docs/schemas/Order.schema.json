@@ -1,0 +1,110 @@
+{
+  "$defs": {
+    "DispositionOutcome": {
+      "description": "Triage disposition path determined during hub inspection.",
+      "enum": [
+        "restock",
+        "refurbish",
+        "liquidate",
+        "recycle"
+      ],
+      "title": "DispositionOutcome",
+      "type": "string"
+    }
+  },
+  "description": "Customer return order / RMA shipment in the reverse-logistics network.",
+  "properties": {
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "sku_id": {
+      "title": "Sku Id",
+      "type": "string"
+    },
+    "quantity": {
+      "exclusiveMinimum": 0,
+      "title": "Quantity",
+      "type": "integer"
+    },
+    "origin_id": {
+      "title": "Origin Id",
+      "type": "string"
+    },
+    "destination_hub_id": {
+      "title": "Destination Hub Id",
+      "type": "string"
+    },
+    "created_minute": {
+      "minimum": 0,
+      "title": "Created Minute",
+      "type": "number"
+    },
+    "promise_window_start_minute": {
+      "minimum": 0,
+      "title": "Promise Window Start Minute",
+      "type": "number"
+    },
+    "promise_window_end_minute": {
+      "exclusiveMinimum": 0,
+      "title": "Promise Window End Minute",
+      "type": "number"
+    },
+    "return_reason": {
+      "default": "size_or_fit",
+      "title": "Return Reason",
+      "type": "string"
+    },
+    "reported_condition": {
+      "default": "opened_good",
+      "title": "Reported Condition",
+      "type": "string"
+    },
+    "true_disposition": {
+      "$ref": "#/$defs/DispositionOutcome",
+      "default": "restock"
+    },
+    "priority": {
+      "default": 1,
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Priority",
+      "type": "integer"
+    },
+    "requires_safety_segregation": {
+      "default": false,
+      "title": "Requires Safety Segregation",
+      "type": "boolean"
+    },
+    "cancel_minute": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cancel Minute"
+    },
+    "is_synthetic": {
+      "default": true,
+      "title": "Is Synthetic",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "order_id",
+    "sku_id",
+    "quantity",
+    "origin_id",
+    "destination_hub_id",
+    "created_minute",
+    "promise_window_start_minute",
+    "promise_window_end_minute"
+  ],
+  "title": "Order",
+  "type": "object"
+}

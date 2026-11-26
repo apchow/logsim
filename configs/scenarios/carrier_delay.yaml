@@ -1,0 +1,7 @@
+scenario_id: carrier_delay
+version: "1.0.0"
+base_dataset: demo
+overlays:
+  carrier_delay_minutes: 45
+  lead_time_increase_pct: 10
+seed: 0

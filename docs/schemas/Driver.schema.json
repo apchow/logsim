@@ -1,0 +1,30 @@
+{
+  "description": "Driver paired with a vehicle and bound by Hours-of-Service (HOS) rules.",
+  "properties": {
+    "driver_id": {
+      "title": "Driver Id",
+      "type": "string"
+    },
+    "assigned_vehicle_id": {
+      "title": "Assigned Vehicle Id",
+      "type": "string"
+    },
+    "max_shift_minutes": {
+      "default": 480.0,
+      "exclusiveMinimum": 0,
+      "title": "Max Shift Minutes",
+      "type": "number"
+    },
+    "calendar_id": {
+      "default": "cal_driver_day",
+      "title": "Calendar Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "driver_id",
+    "assigned_vehicle_id"
+  ],
+  "title": "Driver",
+  "type": "object"
+}

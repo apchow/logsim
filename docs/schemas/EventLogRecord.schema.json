@@ -1,0 +1,148 @@
+{
+  "$defs": {
+    "EventType": {
+      "description": "All 20 supported immutable discrete-event types.",
+      "enum": [
+        "order_created",
+        "order_cancelled",
+        "inventory_received",
+        "inventory_consumed",
+        "vehicle_available",
+        "vehicle_departed",
+        "vehicle_arrived",
+        "dock_occupied",
+        "dock_released",
+        "picker_task_created",
+        "picker_task_completed",
+        "robot_task_created",
+        "robot_task_completed",
+        "disruption_started",
+        "disruption_ended",
+        "policy_decision",
+        "shipment_dispatched",
+        "shipment_delivered",
+        "stockout_occurred",
+        "exception_raised"
+      ],
+      "title": "EventType",
+      "type": "string"
+    }
+  },
+  "description": "Immutable event emitted by the discrete-event simulator with disclosure timestamp.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "sequence_no": {
+      "minimum": 0,
+      "title": "Sequence No",
+      "type": "integer"
+    },
+    "timestamp_minute": {
+      "minimum": 0,
+      "title": "Timestamp Minute",
+      "type": "number"
+    },
+    "available_at_minute": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Available At Minute"
+    },
+    "event_type": {
+      "$ref": "#/$defs/EventType"
+    },
+    "entity_id": {
+      "title": "Entity Id",
+      "type": "string"
+    },
+    "entity_type": {
+      "title": "Entity Type",
+      "type": "string"
+    },
+    "location_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Location Id"
+    },
+    "order_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Order Id"
+    },
+    "resource_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resource Id"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "scenario_id": {
+      "title": "Scenario Id",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "synthetic": {
+      "default": true,
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "sequence_no",
+    "timestamp_minute",
+    "event_type",
+    "entity_id",
+    "entity_type",
+    "run_id",
+    "scenario_id",
+    "seed"
+  ],
+  "title": "EventLogRecord",
+  "type": "object"
+}

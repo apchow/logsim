@@ -1,0 +1,19 @@
+experiment_name: ppo_reverse_training
+seed: 42
+eval_seeds: [101, 202, 303, 404, 505]
+scenario_ids:
+  - baseline_normal
+  - peak_surge_breakdown
+  - storm_tight_sla
+rl:
+  total_timesteps: 30000
+  learning_rate: 0.0003
+  n_steps: 512
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01
+  net_arch: [128, 128]
+  model_output_path: artifacts/models/ppo_reverse_dispatcher.zip

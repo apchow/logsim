@@ -1,0 +1,71 @@
+{
+  "description": "Reverse pickup vehicle with capacity, speed, emissions, and hazmat certification.",
+  "properties": {
+    "vehicle_id": {
+      "title": "Vehicle Id",
+      "type": "string"
+    },
+    "home_hub_id": {
+      "title": "Home Hub Id",
+      "type": "string"
+    },
+    "capacity_kg": {
+      "exclusiveMinimum": 0,
+      "title": "Capacity Kg",
+      "type": "number"
+    },
+    "capacity_m3": {
+      "exclusiveMinimum": 0,
+      "title": "Capacity M3",
+      "type": "number"
+    },
+    "capacity_units": {
+      "exclusiveMinimum": 0,
+      "title": "Capacity Units",
+      "type": "integer"
+    },
+    "hazmat_certified": {
+      "default": false,
+      "title": "Hazmat Certified",
+      "type": "boolean"
+    },
+    "speed_kmph": {
+      "default": 45.0,
+      "exclusiveMinimum": 0,
+      "title": "Speed Kmph",
+      "type": "number"
+    },
+    "cost_per_hour": {
+      "default": 32.0,
+      "minimum": 0,
+      "title": "Cost Per Hour",
+      "type": "number"
+    },
+    "cost_per_km": {
+      "default": 1.15,
+      "minimum": 0,
+      "title": "Cost Per Km",
+      "type": "number"
+    },
+    "emission_kg_co2_per_km": {
+      "default": 0.27,
+      "minimum": 0,
+      "title": "Emission Kg Co2 Per Km",
+      "type": "number"
+    },
+    "calendar_id": {
+      "default": "cal_driver_day",
+      "title": "Calendar Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "vehicle_id",
+    "home_hub_id",
+    "capacity_kg",
+    "capacity_m3",
+    "capacity_units"
+  ],
+  "title": "Vehicle",
+  "type": "object"
+}

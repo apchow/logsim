@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "HandlingClass": {
+      "description": "Physical and safety handling classification of returned SKUs.",
+      "enum": [
+        "standard",
+        "fragile",
+        "hazmat_battery"
+      ],
+      "title": "HandlingClass",
+      "type": "string"
+    }
+  },
+  "description": "Stock-keeping unit metadata including reverse recovery & safety specs.",
+  "properties": {
+    "sku_id": {
+      "title": "Sku Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "category": {
+      "title": "Category",
+      "type": "string"
+    },
+    "unit_weight_kg": {
+      "exclusiveMinimum": 0,
+      "title": "Unit Weight Kg",
+      "type": "number"
+    },
+    "unit_volume_m3": {
+      "exclusiveMinimum": 0,
+      "title": "Unit Volume M3",
+      "type": "number"
+    },
+    "unit_value_usd": {
+      "minimum": 0,
+      "title": "Unit Value Usd",
+      "type": "number"
+    },
+    "recovery_value_usd": {
+      "minimum": 0,
+      "title": "Recovery Value Usd",
+      "type": "number"
+    },
+    "handling_class": {
+      "$ref": "#/$defs/HandlingClass",
+      "default": "standard"
+    },
+    "inspection_minutes": {
+      "exclusiveMinimum": 0,
+      "title": "Inspection Minutes",
+      "type": "number"
+    },
+    "restockable": {
+      "default": true,
+      "title": "Restockable",
+      "type": "boolean"
+    },
+    "refurbishable": {
+      "default": true,
+      "title": "Refurbishable",
+      "type": "boolean"
+    },
+    "refurb_kit_sku_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Refurb Kit Sku Id"
+    }
+  },
+  "required": [
+    "sku_id",
+    "name",
+    "category",
+    "unit_weight_kg",
+    "unit_volume_m3",
+    "unit_value_usd",
+    "recovery_value_usd",
+    "inspection_minutes"
+  ],
+  "title": "SKU",
+  "type": "object"
+}

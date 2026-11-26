@@ -1,0 +1,122 @@
+{
+  "description": "Explicit operational constraint enforced by the simulator guard.",
+  "properties": {
+    "constraint_id": {
+      "title": "Constraint Id",
+      "type": "string"
+    },
+    "scope": {
+      "enum": [
+        "vehicle",
+        "dock",
+        "hub_storage",
+        "inspection",
+        "driver_hos",
+        "safety",
+        "sla"
+      ],
+      "title": "Scope",
+      "type": "string"
+    },
+    "target_id": {
+      "title": "Target Id",
+      "type": "string"
+    },
+    "max_weight_kg": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Weight Kg"
+    },
+    "max_volume_m3": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Volume M3"
+    },
+    "max_units": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Units"
+    },
+    "max_concurrent_slots": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Concurrent Slots"
+    },
+    "max_shift_minutes": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Shift Minutes"
+    },
+    "min_on_time_rate": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Min On Time Rate"
+    },
+    "require_hazmat_cert": {
+      "default": false,
+      "title": "Require Hazmat Cert",
+      "type": "boolean"
+    },
+    "hard": {
+      "default": true,
+      "title": "Hard",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "constraint_id",
+    "scope",
+    "target_id"
+  ],
+  "title": "CapacityConstraint",
+  "type": "object"
+}

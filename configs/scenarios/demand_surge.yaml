@@ -1,0 +1,7 @@
+scenario_id: demand_surge
+version: "1.0.0"
+base_dataset: demo
+overlays:
+  demand_multiplier: 1.5
+  demand_mix_shift: 0.0
+seed: 0

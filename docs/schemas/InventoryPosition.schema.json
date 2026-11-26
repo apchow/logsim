@@ -1,0 +1,61 @@
+{
+  "description": "Inventory state at a hub for a given SKU.",
+  "properties": {
+    "timestamp_minute": {
+      "minimum": 0,
+      "title": "Timestamp Minute",
+      "type": "number"
+    },
+    "location_id": {
+      "title": "Location Id",
+      "type": "string"
+    },
+    "sku_id": {
+      "title": "Sku Id",
+      "type": "string"
+    },
+    "on_hand_restock_units": {
+      "default": 0,
+      "minimum": 0,
+      "title": "On Hand Restock Units",
+      "type": "integer"
+    },
+    "quarantined_units": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Quarantined Units",
+      "type": "integer"
+    },
+    "in_inspection_units": {
+      "default": 0,
+      "minimum": 0,
+      "title": "In Inspection Units",
+      "type": "integer"
+    },
+    "refurb_kit_units": {
+      "default": 40,
+      "minimum": 0,
+      "title": "Refurb Kit Units",
+      "type": "integer"
+    },
+    "backorder_units": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Backorder Units",
+      "type": "integer"
+    },
+    "reorder_point": {
+      "default": 10,
+      "minimum": 0,
+      "title": "Reorder Point",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "timestamp_minute",
+    "location_id",
+    "sku_id"
+  ],
+  "title": "InventoryPosition",
+  "type": "object"
+}

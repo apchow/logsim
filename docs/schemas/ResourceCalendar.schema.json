@@ -1,0 +1,41 @@
+{
+  "description": "Operating shift and working-day calendar.",
+  "properties": {
+    "calendar_id": {
+      "title": "Calendar Id",
+      "type": "string"
+    },
+    "shift_start_hour": {
+      "default": 6,
+      "maximum": 23,
+      "minimum": 0,
+      "title": "Shift Start Hour",
+      "type": "integer"
+    },
+    "shift_end_hour": {
+      "default": 22,
+      "maximum": 24,
+      "minimum": 1,
+      "title": "Shift End Hour",
+      "type": "integer"
+    },
+    "working_days": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Working Days",
+      "type": "array"
+    },
+    "max_continuous_hours": {
+      "default": 8.0,
+      "exclusiveMinimum": 0,
+      "title": "Max Continuous Hours",
+      "type": "number"
+    }
+  },
+  "required": [
+    "calendar_id"
+  ],
+  "title": "ResourceCalendar",
+  "type": "object"
+}

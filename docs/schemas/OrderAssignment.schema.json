@@ -1,0 +1,36 @@
+{
+  "description": "Single order dispatching decision emitted by a policy.",
+  "properties": {
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "vehicle_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Vehicle Id"
+    },
+    "action_type": {
+      "enum": [
+        "dispatch",
+        "defer",
+        "overflow_carrier"
+      ],
+      "title": "Action Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "order_id",
+    "action_type"
+  ],
+  "title": "OrderAssignment",
+  "type": "object"
+}
