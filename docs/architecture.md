@@ -20,7 +20,8 @@ flowchart TD
     Env <--> Policies["Current Replay | Rules | OR-Tools CP-SAT | ML Risk | SB3 PPO"]
     Log --> Eval["KPI Engine + Paired Multi-Seed Stats"]
     Eval --> Reg["DuckDB + Parquet + MLflow Registry"]
-    Reg --> Outputs["Typer CLI | FastAPI | Streamlit Dashboard | HTML & PDF Reports"]
+    Routing["Cached Routing Adapters (OSRM | GraphHopper | Planar)"] --> Sim
+    Reg --> Outputs["Typer CLI | FastAPI | Gradio UI | MCP Server (9 Tools) | HTML & PDF Reports"]
 ```
 
 ## Leakage Prevention & Cryptographic Provenance

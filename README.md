@@ -11,6 +11,7 @@ Production-ready MVP platform for backtesting AI, optimization, and rule-based o
 - **Reproducible Experiment Registry**: Stores `config_hash`, Git commit, `data_snapshot_id`, seed, policy version, scenario ID, KPI metrics, runtime, DuckDB tables, Parquet event logs, and MLflow tracking runs.
 - **Paired Multi-Seed Evaluation**: Reports mean, median, P5, P95, std, paired t-test, Wilcoxon, permutation p-values, Holm-Bonferroni correction, Student's t & paired bootstrap 95% confidence intervals, Cohen's d effect sizes, constraint violations, and per-scenario uplift with CSV/Parquet/HTML/PDF exports.
 - **Fail-Closed Data Contracts & Atomic Snapshots**: Preserves string IDs (`"0001"`, `"NA"`), rejects duplicate headers and mixed synthetic/historical provenance, supports multi-file bundles (`examples/demo/`) and directory scenarios (`configs/scenarios/*.yaml`), and publishes SHA-256 verified snapshots.
+- **Deterministic Cached Routing & Internal MCP Server**: Exposes OSRM, GraphHopper, and Planar distance/duration matrix adapters with persistent SHA-256 response caching (`app/routing/`), on-demand Gemini API executive summaries (`POST /analyze`), and an internal 9-tool MCP server (`logisticsbt-mcp`).
 
 ## Quickstart
 

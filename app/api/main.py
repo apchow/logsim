@@ -11,6 +11,7 @@ from app.api.schemas import (
     AnalyzeRequest,
     BacktestRequest,
     BacktestResponse,
+    RouteMatrixRequest,
     SimulateRequest,
     SyntheticDatasetRequest,
 )
@@ -23,6 +24,7 @@ from app.experiments.registry import ExperimentRegistry
 from app.experiments.runner import run_backtest_suite, run_single_episode
 from app.experiments.scenarios import load_scenarios
 from app.policies.registry import available_policy_ids, build_policy
+from app.routing.adapters import GeoPoint, get_route_matrix
 
 app = FastAPI(
     title="Logistics Backtester API",
@@ -174,3 +176,18 @@ def analyze_experiment(req: AnalyzeRequest) -> dict[str, Any]:
         question=req.question,
         model=req.model,
     )
+
+
+@app.post("/routing/matrix")
+def compute_route_matrix(req: RouteMatrixRequest) -> dict[str, Any]:
+    """Compute or replay a deterministic cached OSRM / GraphHopper / planar route matrix."""
+    orig_pts = [GeoPoint.model_validate(o) for o in req.origins]
+    dest_pts = [GeoPoint.model_validate(d) for d in req.destinations]
+    matrix = get_route_matrix(
+        origins=orig_pts,
+        destinations=dest_pts,
+        provider=req.provider,
+        profile=req.profile,
+        departure_minute=req.departure_minute,
+    )
+    return matrix.model_dump(mode="json")

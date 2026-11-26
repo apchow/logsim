@@ -52,3 +52,11 @@ class AnalyzeRequest(BaseModel):
     baseline_policy_id: str = "current_replay"
     question: str | None = None
     model: str = "gemini-4-hydrogen"
+
+
+class RouteMatrixRequest(BaseModel):
+    origins: list[dict[str, Any]]
+    destinations: list[dict[str, Any]]
+    profile: str = "driving"
+    provider: str = "osrm"
+    departure_minute: float = 0.0

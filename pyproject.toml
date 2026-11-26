@@ -39,6 +39,7 @@ dependencies = [
   "httpx>=0.27.0",
   "gradio>=5.0.0",
   "google-genai>=3.2.0",
+  "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +59,7 @@ dev = [
 
 [project.scripts]
 logisticsbt = "app.cli.main:app"
+logisticsbt-mcp = "app.mcp_server.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
