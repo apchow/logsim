@@ -1,9 +1,10 @@
-"""Typer CLI entrypoint (`logisticsbt`) for ingestion, validation, simulation, training, backtesting, reporting, and exporting."""
+"""Typer CLI entrypoint (`logisticsbt`) for ingestion, validation, simulation, training, backtesting, reporting, exporting, routing, and MCP."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
@@ -15,6 +16,10 @@ from app.data.normalization import load_dataset_snapshot, save_dataset_snapshot
 from app.data.synthetic import generate_synthetic_dataset
 from app.data.validation import validate_dataset, validate_raw_order_rows
 from app.domain.entities import NetworkDataset
+from app.domain.enums import LocationType
+
+if TYPE_CHECKING:
+    from app.routing.adapters import GeoPoint
 from app.evaluation.reporting import (
     export_results_csv,
     export_results_parquet,
@@ -324,6 +329,145 @@ def export(
         console.print(f"[red]Unsupported export format:[/red] {fmt}")
         raise typer.Exit(code=1)
     console.print(f"[green]Exported {len(df)} rows -> {out}[/green]")
+
+
+def _parse_geopoints(
+    raw: str | None,
+    dataset: NetworkDataset | None,
+    default_hubs_only: bool,
+) -> list[GeoPoint]:
+    """Parse GeoPoints from JSON list, comma-separated dataset location IDs, or dataset defaults."""
+    from app.routing.adapters import GeoPoint
+
+    if raw is not None and raw.strip():
+        stripped = raw.strip()
+        if stripped.startswith("["):
+            parsed: Any = json.loads(stripped)
+            if not isinstance(parsed, list) or not parsed:
+                raise ValueError("JSON origins/destinations must be a non-empty list.")
+            return [GeoPoint.model_validate(item) for item in parsed]
+
+        if dataset is None:
+            raise ValueError("Dataset is required when specifying location IDs.")
+        loc_map = {loc.location_id: loc for loc in dataset.locations}
+        points: list[GeoPoint] = []
+        for token in [tok.strip() for tok in stripped.split(",") if tok.strip()]:
+            if token not in loc_map:
+                raise KeyError(f"Unknown location_id '{token}' in dataset '{dataset.dataset_id}'")
+            loc = loc_map[token]
+            points.append(GeoPoint(location_id=loc.location_id, x_km=loc.x_km, y_km=loc.y_km))
+        if not points:
+            raise ValueError("At least one location ID must be provided.")
+        return points
+
+    if dataset is None:
+        raise ValueError("Dataset is required when origins/destinations are omitted.")
+    locs = (
+        [loc for loc in dataset.locations if loc.location_type == LocationType.RETURN_HUB]
+        if default_hubs_only
+        else [loc for loc in dataset.locations if loc.location_type != LocationType.RETURN_HUB]
+    )
+    if not locs:
+        locs = list(dataset.locations[:2] if default_hubs_only else dataset.locations)
+    return [GeoPoint(location_id=loc.location_id, x_km=loc.x_km, y_km=loc.y_km) for loc in locs]
+
+
+@app.command(name="mcp")
+def mcp_cmd() -> None:
+    """Start the internal MCP 2.x stdio server (`app.mcp_server.server.main`)."""
+    from app.mcp_server.server import main as mcp_main
+
+    mcp_main()
+
+
+@app.command(name="route-matrix")
+def route_matrix_cmd(
+    provider: Annotated[
+        str, typer.Option("--provider", "-p", help="Routing provider: osrm, graphhopper, or planar")
+    ] = "osrm",
+    profile: Annotated[str, typer.Option("--profile", help="Routing profile (driving or truck)")] = "driving",
+    departure_minute: Annotated[
+        float, typer.Option("--departure-minute", help="Departure minute for hourly cache bucketing")
+    ] = 0.0,
+    origins: Annotated[
+        str | None,
+        typer.Option("--origins", help="Comma-separated location IDs or JSON list of GeoPoint objects"),
+    ] = None,
+    destinations: Annotated[
+        str | None,
+        typer.Option("--destinations", help="Comma-separated location IDs or JSON list of GeoPoint objects"),
+    ] = None,
+    dataset: Annotated[Path | None, typer.Option("--dataset", "-d", help="Dataset snapshot path")] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", help="Optional live OSRM/GraphHopper URL")] = None,
+    cache_path: Annotated[
+        Path | None, typer.Option("--cache-path", help="Persistent route matrix cache JSON path")
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Print full RouteMatrix as JSON")] = False,
+) -> None:
+    """Compute or replay a cached OSRM / GraphHopper / Planar origin-destination route matrix."""
+    from app.routing.adapters import get_route_matrix
+
+    valid_providers = {"osrm", "graphhopper", "planar", "planar_cached"}
+    if provider.lower() not in valid_providers:
+        console.print(
+            f"[red]Unsupported routing provider:[/red] {provider}. Choose from osrm, graphhopper, planar."
+        )
+        raise typer.Exit(code=1)
+
+    settings = load_app_settings()
+    needs_dataset = (
+        origins is None
+        or destinations is None
+        or not origins.strip().startswith("[")
+        or not destinations.strip().startswith("[")
+    )
+    ds = _resolve_dataset(dataset, seed=42) if needs_dataset else None
+
+    try:
+        origin_pts = _parse_geopoints(origins, ds, default_hubs_only=True)
+        dest_pts = _parse_geopoints(destinations, ds, default_hubs_only=False)
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        console.print(f"[red]Invalid route-matrix locations:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    resolved_cache = cache_path or (settings.artifacts_dir / "cache" / "route_cache.json")
+    matrix = get_route_matrix(
+        origins=origin_pts,
+        destinations=dest_pts,
+        provider=provider.lower(),
+        profile=profile,
+        departure_minute=departure_minute,
+        base_url=base_url,
+        cache_path=resolved_cache,
+    )
+
+    if json_output:
+        console.print_json(matrix.model_dump_json())
+        return
+
+    table = Table(
+        title=(
+            f"Route Matrix ({matrix.provider} | {matrix.profile} | "
+            f"cache_hit={matrix.cache_hit})"
+        )
+    )
+    table.add_column("Origin")
+    table.add_column("Destination")
+    table.add_column("Distance (km)", justify="right")
+    table.add_column("Duration (min)", justify="right")
+    for i, orig_id in enumerate(matrix.origins):
+        for j, dest_id in enumerate(matrix.destinations):
+            table.add_row(
+                orig_id,
+                dest_id,
+                f"{matrix.distances_km[i][j]:.3f}",
+                f"{matrix.durations_minutes[i][j]:.2f}",
+            )
+    console.print(table)
+    console.print(
+        f"Provider={matrix.provider} | Profile={matrix.profile} | "
+        f"CacheHit={matrix.cache_hit} | SHA256={matrix.matrix_sha256}"
+    )
 
 
 if __name__ == "__main__":
